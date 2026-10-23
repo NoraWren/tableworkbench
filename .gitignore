@@ -1,0 +1,11 @@
+# 基准数据不进仓库
+bench-data/
+
+# Swift
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+
+# macOS
+.DS_Store
