@@ -53,6 +53,7 @@ xcodebuild -version
 | 查询引擎 | DuckDB 官方 Swift 包 `duckdb/duckdb-swift`，SPM 接入 | 已定，版本首轮集成时锁定 |
 | Excel | 待验证：DuckDB excel 扩展 / CoreXLSX / 先转 CSV | 待决策，见 R-DEC-05 |
 | 状态管理 | `@Observable`（Observation 框架） | 已定 |
+| AI 接入 | OpenAI 兼容与 Anthropic Messages 两种协议，密钥存 Keychain，默认关闭 | v0.2，见 R-AI-01 |
 | 最低系统 | macOS 14 | 已定 |
 | 分发 | dmg + Developer ID 签名 + 公证，不上 App Store | 已定，见 R-REL-02 |
 
@@ -65,11 +66,12 @@ xcodebuild -version
 ```
 SwiftUI Views            窗口、侧栏、检查器、工具栏、菜单
       ↓
-@Observable 状态层        TableModel / QueryModel / ImportModel
+@Observable 状态层        TableModel / QueryModel / ImportModel / AIModel
       ↓
 DataGrid (AppKit)        NSViewRepresentable → NSTableView
       ↓
 DuckDBKit               连接、语句、结果集、分块取数
+AIClient                协议适配、上下文构造、流式解析（旁路，不碰数据库）
 ```
 
 四条硬规矩：
@@ -78,6 +80,8 @@ DuckDBKit               连接、语句、结果集、分块取数
 2. **UI 只认"块"。** 表格按块取数，块大小 5000 行，最近使用的块留在内存里做 LRU，见 R-GRID-02。
 3. **导入一次，之后秒开。** 文本和 Excel 首次打开时转成 Parquet 存本地缓存，之后直接读 Parquet，见 R-IMP-05。
 4. **DuckDB 的 C 内存由 DuckDBKit 统一释放。** 结果集、预处理语句、连接都要有明确的关闭路径，不能靠 ARC 猜。
+5. **AI 只产文本，不碰数据库。** 模型生成的 SQL 先进编辑器，用户点运行才走 DuckDBKit 的只读通道。
+6. **密钥只进 Keychain。** 配置文件、日志、崩溃报告、导出包都不许出现 API Key。
 
 ## 6. 需求索引
 
@@ -96,6 +100,7 @@ DuckDBKit               连接、语句、结果集、分块取数
 | R-SHELL | [docs/requirements/09-app-shell.md](docs/requirements/09-app-shell.md) | 窗口、菜单、快捷键、深色模式、错误态 | P1 | 已定义 |
 | R-REL | [docs/requirements/10-packaging-release.md](docs/requirements/10-packaging-release.md) | 签名、公证、README、GIF、发布渠道 | P0 | 已定义 |
 | R-MS | [docs/requirements/11-milestones.md](docs/requirements/11-milestones.md) | 12 周里程碑与放行门槛 | P0 | 前置条件未就绪 |
+| R-AI | [docs/requirements/13-ai-analysis.md](docs/requirements/13-ai-analysis.md) | 模型配置、问数、一键洞察、隐私与安全 | P1 | 已定义，v0.2 |
 | R-DEC | [docs/requirements/12-decisions-risks.md](docs/requirements/12-decisions-risks.md) | 已定决策、待验证事实、待决策项、风险 | P0 | 3 项待拍板 |
 | — | [docs/requirements/README.md](docs/requirements/README.md) | 编号规则、状态图例、写作规范 | — | — |
 | — | [docs/requirements/glossary.md](docs/requirements/glossary.md) | 术语表 | — | — |
@@ -144,9 +149,10 @@ DuckDBKit               连接、语句、结果集、分块取数
 │   ├── Package.swift            # SPM 工程，DuckDBKit 单独成 target 便于测试
 │   ├── Sources/
 │   │   ├── TableWorkbenchApp/   # App 入口、窗口、菜单
-│   │   ├── Features/            # 导入、网格、SQL、透视、检查器、导出
+│   │   ├── Features/            # 导入、网格、SQL、透视、检查器、导出、AI
 │   │   ├── DataGrid/            # NSViewRepresentable + NSTableView
-│   │   └── DuckDBKit/           # 连接、语句、结果集、分块、类型映射
+│   │   ├── DuckDBKit/           # 连接、语句、结果集、分块、类型映射
+│   │   └── AIClient/            # 协议适配、上下文构造、流式解析
 │   └── Tests/DuckDBKitTests/
 └── scripts/
     ├── make-bench-data.sh       # 生成基准数据集

@@ -19,6 +19,7 @@
 | SHELL | `09-app-shell.md` |
 | REL | `10-packaging-release.md` |
 | MS | `11-milestones.md` |
+| AI | `13-ai-analysis.md` |
 | DEC | `12-decisions-risks.md` |
 
 编号只增不改。删除的需求不重新编号，保留原文并划掉。
@@ -58,7 +59,7 @@
 
 | 文件 | 条目数 | 已完成 | 状态 |
 |---|---|---|---|
-| 01-product-scope.md | 6 | 0 | 已定义 |
+| 01-product-scope.md | 7 | 0 | 已定义 |
 | 02-data-import.md | 7 | 0 | 部分待验证 |
 | 03-data-grid.md | 8 | 0 | 已定义 |
 | 04-sql-console.md | 5 | 0 | 已定义 |
@@ -66,9 +67,10 @@
 | 06-column-inspector.md | 4 | 0 | 已定义 |
 | 07-export.md | 4 | 0 | 已定义 |
 | 08-performance.md | 7 | 0 | 已定义 |
-| 09-app-shell.md | 6 | 0 | 已定义 |
+| 09-app-shell.md | 7 | 0 | 已定义 |
 | 10-packaging-release.md | 6 | 0 | 已定义 |
-| 11-milestones.md | 9 | 0 | 前置条件未就绪 |
-| 12-decisions-risks.md | 10 | 0 | 3 项待拍板 |
+| 11-milestones.md | 10 | 0 | 前置条件未就绪 |
+| 12-decisions-risks.md | 13 | 0 | 3 项待拍板 |
+| 13-ai-analysis.md | 15 | 0 | 已定义，v0.2 |
 
-共 76 条需求。
+共 97 条需求。
