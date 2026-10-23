@@ -1,0 +1,51 @@
+schema: spec-driven
+
+context: |
+  Project: 本地表格工作台（工作名 TableWorkbench）
+  Product: 面向 macOS 的本地数据分析台。SwiftUI 原生 + DuckDB，读取 CSV/TSV/Parquet/xlsx，支持排序、筛选、SQL、透视，数据不出本机。
+  Language: Chinese (中文)。所有提案、规格、设计、任务、说明一律用中文撰写；OpenSpec 的结构性标题与 SHALL/MUST 等关键字保留英文。
+  Platform: macOS 14+，arm64，Swift 6，SwiftUI + AppKit NSTableView 桥接。
+  Repository shape: 单一 SPM/Xcode 工程。当前只有需求文档，代码尚未开始。
+  Requirements source of truth: docs/requirements/*.md，条目编号形如 R-IMP-01。proposal 和 specs 必须引用相关编号，不复制需求全文。
+  Split of responsibilities:
+    - docs/requirements: 需求池，写用户可见行为、验收标准、边界、依赖。
+    - openspec/specs: 能力契约，写已经实现并稳定下来的行为，按能力（kebab-case）组织。
+    - openspec/changes: 一次改动的提案、设计、任务清单。
+  Hard constraints (a change may touch them only by recording the tradeoff explicitly):
+    - 性能预算见 docs/requirements/08-performance.md：500MB CSV 首次打开 ≤ 2 秒，二次 ≤ 1 秒，1000 万行滚动 60fps，dmg ≤ 30MB。
+    - 只读数据：DuckDB 连接只读，允许临时表，绝不写回源文件。
+    - 不引入 Electron、WebView、Node 运行时或跨平台 UI 框架。
+    - 数据表格必须走 NSTableView，不用 SwiftUI Table/List 承载数据行。
+    - 用户数据不上传、不进日志、不进崩溃报告。
+  Non-goals for v0.1: 单元格编辑、公式、图表、协作、云同步、插件、Windows/Linux。
+
+rules:
+  proposal:
+    - 必须全部使用中文撰写。
+    - 开头写清这次改动对应哪些需求编号，例如 R-IMP-06。
+    - 明确写出不做什么，以及为什么现在做这件事。
+    - 如果改动会触碰性能预算或只读约束，单独列一节说明取舍。
+  specs:
+    - 必须全部使用中文撰写。
+    - 用需求与场景的语言描述外部可见行为，不写代码结构。
+    - 只写这次真正变化的能力；能力名用 kebab-case，且长期稳定。
+    - 每条 requirement 至少有一个可验证的 scenario，验收要带数字。
+  design:
+    - 必须全部使用中文撰写。
+    - 写清 DuckDB 查询、Swift 侧封装、UI 线程边界三件事如何分工。
+    - 涉及未验证的 API（duckdb-swift、excel 扩展）时先给验证步骤，不写假设性结论。
+    - 记录被否决的方案和原因，一条一句话。
+  tasks:
+    - 必须全部使用中文撰写。
+    - 按可运行的里程碑切分，每组任务做完都能构建、能演示。
+    - 每条任务可勾选、可验证，写清验收方式。
+    - 性能相关任务单独列出基准命令和期望数字。
+
+operations:
+  apply:
+    guidance:
+      - 动手前先确认 config.yaml 里的硬约束没有被绕过。
+      - 每完成一组任务跑一次构建；涉及性能的改动跑 scripts/bench.sh。
+  archive:
+    guidance:
+      - 归档前把实现后的行为同步回 openspec/specs，并在 docs/requirements 对应条目勾掉验收项。

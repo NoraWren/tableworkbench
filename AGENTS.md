@@ -100,12 +100,45 @@ DuckDBKit               连接、语句、结果集、分块取数
 | — | [docs/requirements/README.md](docs/requirements/README.md) | 编号规则、状态图例、写作规范 | — | — |
 | — | [docs/requirements/glossary.md](docs/requirements/glossary.md) | 术语表 | — | — |
 
+## 6.1 OpenSpec 工作流
+
+仓库已经用 OpenSpec 管理规格和改动。配置在 [openspec/config.yaml](openspec/config.yaml)，工作流技能在 [.agents/skills](.agents/skills)。
+
+三处文档的分工是固定的，别搞混：
+
+| 位置 | 放什么 | 什么时候写 |
+|---|---|---|
+| [docs/requirements/](docs/requirements/) | 需求池，编号 R-XXX-nn，带验收、边界、依赖 | 实现之前 |
+| [openspec/specs/](openspec/specs/) | 能力契约，描述已经稳定下来的行为 | 一个能力做完之后 |
+| [openspec/changes/](openspec/changes/) | 一次改动的提案、设计、任务 | 每次动手之前 |
+
+五条规矩：
+
+1. 任何实现都先有 change。没有 proposal 和 tasks 的改动不开工。
+2. proposal 里必须列出对应的需求编号，比如 R-IMP-06。需求全文不复制进 change，引用编号就够。
+3. 提案、规格、设计、任务全部用中文写。SHALL/MUST 这类关键字保留英文，细化规则在 [openspec/config.yaml](openspec/config.yaml) 的 rules 段。
+4. 归档 change 时，同步更新 openspec/specs 和 docs/requirements 里对应条目的验收勾选，两处都要动。
+5. 性能预算和只读约束写在 config.yaml 的 context 里。改动如果绕不过它们，在 proposal 里单列一节写明取舍。
+
+常用命令：
+
+    openspec list                        # 看进行中的 change
+    openspec new change <name>           # 新建
+    openspec status --change <name> --json
+    openspec validate --strict <name>
+    openspec archive <name>
+
 ## 7. 目录结构（首次实现时创建）
 
 ```
 本地表格工作台/
 ├── AGENTS.md
 ├── README.md                    # 对外门面，发布阶段再写
+├── .agents/skills/              # OpenSpec 工作流技能
+├── openspec/                    # 规格与改动，配置在 config.yaml
+│   ├── config.yaml
+│   ├── specs/
+│   └── changes/
 ├── docs/requirements/           # 需求，已存在
 ├── app/
 │   ├── Package.swift            # SPM 工程，DuckDBKit 单独成 target 便于测试
@@ -129,7 +162,8 @@ DuckDBKit               连接、语句、结果集、分块取数
 1. 读本文件的第 1、4、5、8 节，知道这是什么、用什么做、守什么规矩。
 2. 读 [docs/requirements/12-decisions-risks.md](docs/requirements/12-decisions-risks.md) 的"已验证事实"和"待验证事实"两张表。上一轮验过的东西不要重验，没验过的不要当结论用。
 3. 如果写代码，先看 [docs/requirements/11-milestones.md](docs/requirements/11-milestones.md) 里当前周对应的那一条，只看那一条。
-4. 需要拍板的三件事在最后，其余按文档默认值推进，不用回头问。
+4. 要动代码，先跑 openspec list 看有没有进行中的 change；没有就按 [openspec/config.yaml](openspec/config.yaml) 的规则新建一个，提案里引用需求编号。
+5. 需要拍板的三件事在最后，其余按文档默认值推进，不用回头问。
 
 ## 8. 工作规则
 
