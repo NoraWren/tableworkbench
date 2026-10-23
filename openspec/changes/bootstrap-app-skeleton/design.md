@@ -124,6 +124,13 @@ DuckDBKit 不依赖任何上层模块。DataGrid 只依赖 DuckDBKit 里的行�
 6. 结果转成行数组，回到主线程刷新表格。
 7. 滚动到 4500 行附近时预取下一块，用户感知不到等待。
 
+## 当前工具链的限制（2026-10-23 实测）
+
+- Command Line Tools 里没有 SwiftUIMacros 插件，@State、@Bindable 这类宏编译失败。应用层改用 ObservableObject 加 @StateObject，数据模型用 @Published。装好 Xcode 后可以回到 @Observable。
+- Command Line Tools 里没有 XCTest 模块，.xctest 打包还会在 codesign 与 CopySwiftLibs 失败。测试改成 TableWorkbenchTests 可执行程序，断言失败时退出码非零。装好 Xcode 后迁回 Swift Testing。
+- git 默认不走系统代理，首次拉 duckdb-swift 需要显式设置 HTTPS_PROXY。依赖已解析到本地缓存后，日常构建不再需要网络。
+- 屏幕锁定时无法截图或录屏，界面验收只能等解锁后手动做。
+
 ## Risks / Trade-offs
 
 - [duckdb-swift 拉不下来] → 先重试，再用 codeload 下 v1.1.3 压缩包做本地路径依赖；两者都失败就把 DuckDBKit 切到假实现，保证壳和网格可编译，依赖恢复后替换。
@@ -132,6 +139,8 @@ DuckDBKit 不依赖任何上层模块。DataGrid 只依赖 DuckDBKit 里的行�
 - [GBK 转码拖慢首次打开] → 状态栏显示"转码中"，并把转码耗时单独计时；首次打开目标从 2 秒放宽到 3 秒，README 里按实测数字写。
 - [没有 Xcode 导致菜单和窗口行为与正式包不同] → 在 design 和后续任务里记录差异，打包阶段集中修；不把开发期行为当成最终验收。
 - [NSTableView 列宽计算拖慢首屏] → 列宽按表头文本和样本值估算一次，滚动中不重算；列数超过 200 时用固定宽度。
+- [只用 Command Line Tools 导致界面无法自动验收] → 引擎链路用基准程序和测试程序覆盖，界面部分列出待手动验收清单；任务清单里保持未勾选，不假装完成。
+- [深分页 OFFSET 变慢] → 实测第 100 块 0.52 秒，超过 0.2 秒阈值；下个 change 按 D4 改成 rowid 物化。
 
 ## Migration Plan
 

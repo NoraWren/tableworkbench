@@ -186,8 +186,14 @@ AIClient                协议适配、上下文构造、流式解析（旁路�
 ## 9. 验收与运行
 
 ```
-# 依赖解析与单元测试（不依赖 Xcode 的部分）
-cd app && swift build && swift test
+# 构建（Command Line Tools 即可）
+cd app && swift build
+
+# 测试（当前用仓库内的测试可执行程序，原因见 10 节）
+cd app && swift run TableWorkbenchTests
+
+# 启动应用
+cd app && swift run TableWorkbench
 
 # 完整构建（需要 Xcode）
 xcodebuild -scheme TableWorkbench -configuration Debug build
@@ -211,6 +217,9 @@ xcodebuild -scheme TableWorkbench -configuration Debug build
 - **NSTableView 的列宽和复用。** view-based 模式下 cell view 必须复用，列宽计算要在数据变化时批量更新，别在 `viewFor` 里做重活。
 - **Gatekeeper。** 没签名的 dmg 用户打不开，会直接劝退。签名账号要提前一个月办。
 - **不要为了快而跳过基准。** 这个项目的全部叙事建在三个数字上，数字虚了，项目就没了。
+- **没有 Xcode 时，SwiftUI 宏不可用。** 命令行工具链缺 SwiftUIMacros，@State、@Bindable 都编译不过。当前代码用 ObservableObject 加 @StateObject 绕开，装好 Xcode 后可以换回 @Observable。
+- **没有 Xcode 时，swift test 不可用。** XCTest 模块不存在，.xctest 打包还会在 codesign 和 CopySwiftLibs 失败。当前用 TableWorkbenchTests 可执行程序跑断言，装好 Xcode 后迁回 Swift Testing。
+- **拉 duckdb-swift 要走代理。** 本机系统代理是 127.0.0.1:7897，git 默认不走，首次 resolve 需要设置 HTTPS_PROXY 和 HTTP_PROXY。
 
 ## 11. 还需要用户拍板的事
 

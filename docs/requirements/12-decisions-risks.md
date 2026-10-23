@@ -15,6 +15,11 @@
 | duckdb-swift 是 SPM 包，README 写明一行接入，自带 SwiftUI playground 示例 | 抓取 README |
 | **duckdb-swift 最新正式 tag 是 v1.1.3（2024-11-04）**，之后全是 v1.1.4-devN、v2.1.0-devN 这类快照 tag，共 300+ 个 | GitHub tags 接口翻三页 |
 | CoreXLSX 仓库存在，906 star，最后推送 2024-03-25，许可证 Apache-2.0 | GitHub API |
+| DuckDB 1.1.3 的 read_csv 把空字段读成 NULL，带引号的空串也一样 | 本地测试程序实测 |
+| 只用 Command Line Tools 时，SwiftUI 的 @State 等宏与 XCTest 都不可用 | 编译与 swift test 实测 |
+| duckdb-swift 1.1.3 的调用链是 Database(store:) → connect() → query(sql) → ResultSet.column(at:).cast(to:) | 探针程序编译并运行通过 |
+| cast(to: String.self) 只对 VARCHAR 列有值，其他类型返回 nil，所以块查询在 SQL 里统一 CAST AS VARCHAR | 探针实测 |
+| Command Line Tools 下 .xctest 打包会在 codesign 与 CopySwiftLibs 失败，本项目改用测试可执行程序 | swift test 实测 |
 
 ## 待验证事实（不许当成结论写进代码）
 
