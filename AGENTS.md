@@ -192,8 +192,13 @@ cd app && swift build
 # 测试（当前用仓库内的测试可执行程序，原因见 10 节）
 cd app && swift run TableWorkbenchTests
 
-# 启动应用
+# 启动应用（开发期直接跑可执行文件）
 cd app && swift run TableWorkbench
+
+# 组装开发用 .app（macOS 14 之后未打包的进程无法可靠激活）
+./scripts/make-app-bundle.sh
+open build/TableWorkbench.app
+open -a build/TableWorkbench.app file1.csv file2.csv
 
 # 完整构建（需要 Xcode）
 xcodebuild -scheme TableWorkbench -configuration Debug build

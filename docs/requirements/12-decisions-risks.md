@@ -20,6 +20,9 @@
 | duckdb-swift 1.1.3 的调用链是 Database(store:) → connect() → query(sql) → ResultSet.column(at:).cast(to:) | 探针程序编译并运行通过 |
 | cast(to: String.self) 只对 VARCHAR 列有值，其他类型返回 nil，所以块查询在 SQL 里统一 CAST AS VARCHAR | 探针实测 |
 | Command Line Tools 下 .xctest 打包会在 codesign 与 CopySwiftLibs 失败，本项目改用测试可执行程序 | swift test 实测 |
+| macOS 14 之后未打包的进程无法可靠激活，open -a 的多文件事件也收不到 | 实测，改用开发用 .app bundle |
+| SwiftUI WindowGroup 在 open 事件下会开多个窗口，Window 场景只保留一个 | 实测 |
+| 开发期 Bundle ID 暂用 info.ideatech.tableworkbench | Info.plist，正式名待 R-DEC-06 |
 
 ## 待验证事实（不许当成结论写进代码）
 

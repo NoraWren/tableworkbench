@@ -81,31 +81,34 @@ struct ContentView: View {
     @ViewBuilder
     private var detailContent: some View {
         if let entry = model.selectedEntry {
-            if entry.columns.count > DataGridView.maxVisibleColumns {
-                HStack(spacing: 6) {
-                    Image(systemName: "info.circle")
-                    Text("共 \(entry.columns.count) 列，默认显示前 \(DataGridView.defaultVisibleColumns) 列")
-                        .font(.caption)
-                    Spacer()
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(.quaternary)
-            }
-            DataGridView(
-                columns: entry.columns,
-                rowCount: entry.rowCount,
-                provider: { offset, size in
-                    try entry.session.block(offset: offset, size: size)
-                },
-                onError: { error in
-                    let importError = (error as? ImportError) ?? ImportError.wrap(error, step: "读取数据")
-                    Task { @MainActor in
-                        model.report(importError)
+            VStack(spacing: 0) {
+                if entry.columns.count > DataGridView.maxVisibleColumns {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle")
+                        Text("共 \(entry.columns.count) 列，默认显示前 \(DataGridView.defaultVisibleColumns) 列")
+                            .font(.caption)
+                        Spacer()
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.quaternary)
                 }
-            )
-            .id(entry.id)
+                DataGridView(
+                    columns: entry.columns,
+                    rowCount: entry.rowCount,
+                    provider: { offset, size in
+                        try entry.session.block(offset: offset, size: size)
+                    },
+                    onError: { error in
+                        let importError = (error as? ImportError) ?? ImportError.wrap(error, step: "读取数据")
+                        Task { @MainActor in
+                            model.report(importError)
+                        }
+                    }
+                )
+                .id(entry.id)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             EmptyStateView()
         }

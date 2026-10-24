@@ -1,6 +1,9 @@
 # 基准数据不进仓库
 bench-data/
 
+# 本地打包产物
+build/
+
 # Swift
 .build/
 .swiftpm/

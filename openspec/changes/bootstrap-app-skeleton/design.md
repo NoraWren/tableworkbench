@@ -101,6 +101,12 @@ DuckDBKit 抛底层错误；Features 把它映射成 ImportError，带 userMessa
 
 代价是表头高度和行高要自己对齐，收益是行号完全不参与横向滚动，也不引入第二套数据源。
 
+### D11 开发期用脚本组装 .app
+
+macOS 14 之后，未打包的可执行进程无法通过 activate 拿到前台，open -a 的多文件打开事件也收不到。加 scripts/make-app-bundle.sh，把 SPM 产物和 Info.plist 组装成 build/TableWorkbench.app，做 ad-hoc 签名，只用于本地验证。正式签名、公证和发布仍归 R-MS-08，不在本 change 范围。
+
+场景用 Window 而不是 WindowGroup。WindowGroup 在收到 open 事件时会开多个窗口，与 R-SHELL-01 的单窗口要求冲突。窗口启用 AppKit 的 frame autosave，并在恢复出的位置不在任何屏幕内时居中兜底。
+
 ### 模块与依赖方向
 
     TableWorkbenchApp  →  Features  →  DataGrid
