@@ -63,12 +63,12 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 04-sql-console.md | 5 | 已实现，验收框待同步 |
 | 05-pivot-table.md | 4 | 已实现，验收框待同步 |
 | 06-column-inspector.md | 4 | 已实现，验收框待同步 |
-| 07-export.md | 4 | 已实现，验收框待同步 |
-| 08-performance.md | 7 | 基准已有记录，滚动帧率待补测 |
+| 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
+| 08-performance.md | 7 | 基准已有记录；滚动帧率待补测，1000 万行 Parquet 打开未达标（R-DEC-17） |
 | 09-app-shell.md | 7 | 已实现，验收框待同步 |
 | 10-packaging-release.md | 6 | dmg 已出，签名与公证缺账号 |
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
-| 12-decisions-risks.md | 14 | 3 项待拍板 |
+| 12-decisions-risks.md | 17 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
 
-共 98 条需求。
+共 101 条需求。
