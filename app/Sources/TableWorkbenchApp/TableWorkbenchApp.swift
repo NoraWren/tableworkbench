@@ -10,10 +10,23 @@ final class AppEnvironment {
     private init() {}
 }
 
+/// Finder 打开文件的事件先交给界面层，界面还没起来就暂存。
+@MainActor
+final class OpenRequestBus {
+    static let shared = OpenRequestBus()
+    var handle: (([URL]) -> Void)?
+    var pending: [URL] = []
+    private init() {}
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         Task { @MainActor in
-            AppEnvironment.shared.model.open(urls: urls)
+            if let handle = OpenRequestBus.shared.handle {
+                handle(urls)
+            } else {
+                OpenRequestBus.shared.pending = urls
+            }
         }
     }
 

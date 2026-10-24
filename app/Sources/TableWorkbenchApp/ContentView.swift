@@ -211,7 +211,15 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.18), value: model.error != nil)
         .animation(.easeInOut(duration: 0.18), value: model.isLoading)
-        .onAppear { configureCommands() }
+        .onAppear {
+            configureCommands()
+            OpenRequestBus.shared.handle = { urls in handleOpen(urls: urls) }
+            let pending = OpenRequestBus.shared.pending
+            if !pending.isEmpty {
+                OpenRequestBus.shared.pending = []
+                handleOpen(urls: pending)
+            }
+        }
         .onChange(of: model.selection) { _, _ in configureCommands() }
         .onChange(of: model.isRunningSQL) { _, _ in configureCommands() }
         .onReceive(model.$entries) { _ in configureCommands() }
