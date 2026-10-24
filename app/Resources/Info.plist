@@ -9,7 +9,7 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>info.ideatech.tableworkbench</string>
+    <string>dev.kongqi.tableworkbench</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

@@ -2,10 +2,10 @@
 
 ## 发版前必须由人决定
 
-- 产品英文名（GitHub 仓库名、包名）
-- Bundle ID（当前占位 info.ideatech.tableworkbench）
-- 开源许可证（建议 Apache-2.0，见 R-DEC-07）
-- 公司开源审批与著作权归属
+- 产品英文名（GitHub 仓库名、包名）：暂用 TableWorkbench
+- Bundle ID：dev.kongqi.tableworkbench，改域名时同步 Info.plist
+- 开源许可证：Apache-2.0，LICENSE 与 NOTICE 已放入仓库
+- 著作权归属与对外发布审批：仍需确认
 
 ## 签名与公证
 

@@ -23,7 +23,7 @@
 | 分块 CSV 导出在 328 万行上超过 80 秒，rowid 区间过滤每块仍全表扫；COPY 是唯一快路径 | 基准程序实测 |
 | macOS 14 之后未打包的进程无法可靠激活，open -a 的多文件事件也收不到 | 实测，改用开发用 .app bundle |
 | SwiftUI WindowGroup 在 open 事件下会开多个窗口，Window 场景只保留一个 | 实测 |
-| 开发期 Bundle ID 暂用 info.ideatech.tableworkbench | Info.plist，正式名待 R-DEC-06 |
+| Bundle ID 使用 dev.kongqi.tableworkbench | Info.plist，随 R-DEC-06 定名同步 |
 | duckdb-swift 锁定 exact 1.1.3，SPM 解析通过 | app/Package.swift |
 | CSV、TSV、Parquet、xlsx 四条导入链路都能打开；xlsx 6.2 MB、19.9 万行首次 7.23 秒、二次 0.04 秒 | 测试程序与 bench |
 | GB18030 先转成 UTF-8 再交给 DuckDB，中文列名与内容不乱码 | gbk-sample.csv 实测 |
@@ -94,13 +94,13 @@
 - 约束：
   - 英文名要能被搜到又不撞现有项目，先查 GitHub、Homebrew、App Store 是否重名。
   - 不要用"Table""Sheet""Data"这类泛词单独做名字。
-  - Bundle ID 用公司域名反写，比如 info.ideatech.<name>。
+  - Bundle ID 用维护者域名反写，当前为 dev.kongqi.tableworkbench。
 - 影响：不定的后果是包名、目录名、README 全要返工一次。
 
-## R-DEC-07 开源主体与许可证（待你拍板）
+## R-DEC-07 开源主体与许可证（主体待拍板）
 
 - 优先级：P0
-- 状态：待决策
+- 状态：许可证已定 Apache-2.0，LICENSE 与 NOTICE 已入库；开源主体待确认
 - 建议：以公司名义开源，许可证用 Apache-2.0。
 - 理由：Apache-2.0 比 MIT 多一条明确的专利授权，对公司合作方更友好；同时保留将来做商业版的空间。
 - 需要确认：职务作品的著作权归属是否已有制度文件；对外开源是否需要内部审批。

@@ -123,7 +123,7 @@ SQL 执行包含一次 DESCRIBE 和一次带 CAST 的查询，聚合在 DuckDB �
 - dmg：15 MB（release 构建，ad-hoc 签名，未公证）；debug 构建是 27 MB
 - app bundle：53 MB（release）；debug 构建是 109 MB
 - 挂载后包含 TableWorkbench.app
-- Bundle ID：info.ideatech.tableworkbench（占位）
+- Bundle ID：dev.kongqi.tableworkbench
 - Gatekeeper 会拦截未公证的包，正式发布前补 Developer ID
 
 ## 记录

@@ -1,0 +1,11 @@
+TableWorkbench（本地表格工作台）
+Copyright 2026 Kong Qi
+
+This product includes software developed by third parties:
+
+  DuckDB (MIT) — query engine, via duckdb-swift
+  CoreXLSX (Apache-2.0) — xlsx workbook metadata
+  ZIPFoundation (MIT) — xlsx container extraction
+  XMLCoder (MIT) — CoreXLSX transitive dependency
+
+Versions and usage notes: docs/third-party.md
