@@ -88,3 +88,12 @@ xlsx 的 Parquet 缓存 SHALL 以原文件和工作表名作为键。第二次�
 #### Scenario: 超过上限
 - **WHEN** 缓存总量超过 10GB
 - **THEN** 删除最旧的文件直到低于上限，当前文件不受影响
+
+### Requirement: 打开 Parquet 文件
+
+应用 SHALL 支持直接打开 .parquet 文件，跳过文本编码探测与缓存转换。
+
+#### Scenario: 打开导出的 Parquet
+
+- **WHEN** 用户打开一个由应用导出的 .parquet 文件
+- **THEN** 表格显示与导出前一致的行数和列名，侧栏来源类型显示 Parquet
