@@ -21,6 +21,7 @@ private final class PopoverState: ObservableObject {
     @Published var filterShown = false
     @Published var pivotShown = false
     @Published var computedShown = false
+    @Published var chartShown = false
 }
 
 /// 导出前先选范围和格式，界面上同时看到每个范围会导出多少行。
@@ -82,6 +83,7 @@ struct ContentView: View {
     @StateObject private var computed = ComputedColumnState()
     @StateObject private var snippets = SQLSnippetStore()
     @StateObject private var export = ExportSheetState()
+    @StateObject private var chartPanel = ChartPanelState()
 
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
@@ -189,6 +191,19 @@ struct ContentView: View {
                             PivotPanel(columns: entry.columns) { spec in
                                 model.runPivot(entryID: entry.id, spec: spec)
                                 popover.pivotShown = false
+                            }
+                        }
+
+                        Button {
+                            popover.chartShown.toggle()
+                        } label: {
+                            Label("图表", systemImage: "chart.bar")
+                        }
+                        .help("按一列分组画图")
+                        .popover(isPresented: $popover.chartShown, arrowEdge: .bottom) {
+                            ChartPanel(columns: entry.columns, state: chartPanel) { spec in
+                                model.runChart(entryID: entry.id, spec: spec)
+                                popover.chartShown = false
                             }
                         }
                     }
@@ -324,7 +339,14 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if let result = model.sqlResult {
+        if let chart = model.chartData {
+            ChartView(data: chart) {
+                model.clearChart()
+            }
+        } else if model.isBuildingChart {
+            ProgressView("正在生成图表…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let result = model.sqlResult {
             SQLResultView(result: result, title: model.resultTitle ?? "查询结果") {
                 model.clearSQLResult()
             }

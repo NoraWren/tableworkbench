@@ -79,6 +79,7 @@ public final class WorkspaceModel: ObservableObject {
             // 选中行也跟着换，避免把上一份的行号导出去。
             selectedRows = []
             rowDetail = nil
+            chartData = nil
         }
     }
     @Published public private(set) var error: ImportError?
@@ -95,6 +96,8 @@ public final class WorkspaceModel: ObservableObject {
     /// 网格里当前选中的行，导出“选中行”时用。
     @Published public private(set) var selectedRows: IndexSet = []
     @Published public private(set) var rowDetail: RowDetail?
+    @Published public private(set) var chartData: ChartData?
+    @Published public private(set) var isBuildingChart = false
     /// 宽表里用户手动启用的列，按文件记。默认只显示前 200 列。
     @Published private var enabledColumns: [UUID: Set<String>] = [:]
 
@@ -274,6 +277,7 @@ public final class WorkspaceModel: ObservableObject {
         isRunningSQL = true
         sqlResult = nil
         resultTitle = "透视结果"
+        error = nil
 
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> (SQLResult?, ImportError?) in
@@ -293,6 +297,40 @@ public final class WorkspaceModel: ObservableObject {
             }
             isRunningSQL = false
         }
+    }
+
+    /// 分组建图：复用透视的单维度查询，再把结果整理成图上的点。
+    public func runChart(entryID: UUID, spec: ChartSpec) {
+        guard spec.isValid, let entry = entries.first(where: { $0.id == entryID }) else { return }
+        let session = entry.session
+        isBuildingChart = true
+        chartData = nil
+        // 上一次的失败提示留着会盖在新图上。
+        error = nil
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (ChartData?, ImportError?) in
+                do {
+                    let result = try session.pivot(spec: spec.pivotSpec)
+                    return (ChartData.build(result: result, spec: spec), nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "生成图表"))
+                }
+            }.value
+
+            if let data = outcome.0 {
+                chartData = data
+            } else {
+                error = outcome.1
+            }
+            isBuildingChart = false
+        }
+    }
+
+    public func clearChart() {
+        chartData = nil
     }
 
     public func addComputedColumn(entryID: UUID, name: String, expression: String) {

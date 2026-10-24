@@ -372,6 +372,45 @@ func run() throws {
     })
     check("透视与手写 GROUP BY 一致", groupPairs == pivotPairs)
 
+    // 图表：单维度聚合 + 排序 + 收口
+    let chartSpec = ChartSpec(kind: .bar, groupColumn: "city", value: PivotValue(column: "amount", aggregate: .sum))
+    let chartResult = try query.session.pivot(spec: chartSpec.pivotSpec)
+    let chart = ChartData.build(result: chartResult, spec: chartSpec)
+    let chartPairs = Set(chart.points.map { "\($0.label)=\($0.value)" })
+    check("图表与手写 GROUP BY 一致", chartPairs == groupPairs)
+    check("柱状图按数值降序", zip(chart.points, chart.points.dropFirst()).allSatisfy { $0.value >= $1.value })
+    let totalSQL = try query.session.runSQL("SELECT sum(amount) FROM data")
+    let totalValue = Double(totalSQL.rows.first?[0] ?? "") ?? -1
+    check("图表总量等于 SQL 求和", abs(chart.total - totalValue) < 0.001)
+    check("图表最大值等于最大分组", abs(chart.maxValue - (chart.points.map(\.value).max() ?? 0)) < 0.001)
+
+    // 超过 12 组时合并成“其他”
+    let manyColumns = [ColumnInfo(name: "k", displayName: "k", typeName: "VARCHAR", kind: .text),
+                       ColumnInfo(name: "v", displayName: "v", typeName: "DOUBLE", kind: .double)]
+    let manyRows = (0..<900).map { index -> [String?] in
+        ["k\(index)", "\(900 - index)"]
+    }
+    let manyResult = SQLResult(columns: manyColumns, rows: manyRows, rowCount: manyRows.count, elapsed: 0.01, truncated: false)
+    let merged = ChartData.build(result: manyResult, spec: ChartSpec(kind: .bar, groupColumn: "k", value: PivotValue(column: "v")))
+    check("超过 12 组收口为 13 个点", merged.points.count == 13 && merged.mergedCount == 888)
+    check("其他等于剩余之和", abs((merged.points.last?.value ?? 0) - (888.0 * 889 / 2)) < 1)
+    check("收口后量级按前 12 名算", abs(merged.maxValue - 900) < 0.001)
+
+    // 折线图按标签升序
+    let lineRows: [[String?]] = [["2026-03", "30"], ["2026-01", "10"], ["2026-02", "20"]]
+    let lineResult = SQLResult(columns: manyColumns, rows: lineRows, rowCount: 3, elapsed: 0, truncated: false)
+    let line = ChartData.build(result: lineResult, spec: ChartSpec(kind: .line, groupColumn: "k", value: PivotValue(column: "v")))
+    check("折线图按标签升序", line.points.map(\.label) == ["2026-01", "2026-02", "2026-03"])
+
+    // 非数值与空结果
+    let dirtyRows: [[String?]] = [["a", "12.5"], ["b", "—"], ["c", nil]]
+    let dirtyResult = SQLResult(columns: manyColumns, rows: dirtyRows, rowCount: 3, elapsed: 0, truncated: false)
+    let dirty = ChartData.build(result: dirtyResult, spec: ChartSpec(kind: .bar, groupColumn: "k", value: PivotValue(column: "v")))
+    check("跳过非数值与空值", dirty.points.count == 1 && dirty.points[0].label == "a")
+    let emptyChart = ChartData.build(result: .empty, spec: chartSpec)
+    check("空结果不画图", emptyChart.isEmpty && emptyChart.maxValue == 0)
+    check("数值千分位格式", ChartData.format(12345.6789) == "12,345.68")
+
     let cityStats = try query.session.columnStats(column: "city")
     let nameStats = try query.session.columnStats(column: "name")
     check("文本最短长度 1", nameStats.minLength == 1)

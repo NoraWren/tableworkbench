@@ -70,5 +70,6 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 17 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
+| 14-charts.md | 4 | 图表四类已实现，1 秒出图未达标 |
 
 共 101 条需求。
