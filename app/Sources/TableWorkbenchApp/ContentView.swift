@@ -23,6 +23,54 @@ private final class PopoverState: ObservableObject {
     @Published var computedShown = false
 }
 
+/// 导出前先选范围和格式，界面上同时看到每个范围会导出多少行。
+private final class ExportSheetState: ObservableObject {
+    enum Scope: String, CaseIterable, Identifiable {
+        case view
+        case all
+        case selection
+        var id: String { rawValue }
+    }
+
+    @Published var isPresented = false
+    @Published var scope: Scope = .view
+    @Published var format: ExportFormat = .csv
+    private(set) var entryID: UUID?
+    private(set) var viewRows = 0
+    private(set) var allRows = 0
+    private(set) var selectedRows = IndexSet()
+
+    func present(entry: WorkspaceModel.Entry, selectedRows: IndexSet) {
+        entryID = entry.id
+        viewRows = entry.resultCount
+        allRows = entry.rowCount
+        self.selectedRows = selectedRows
+        scope = .view
+        let stored = UserDefaults.standard.string(forKey: "defaultExportFormat") ?? "csv"
+        format = stored == "parquet" ? .parquet : .csv
+        isPresented = true
+    }
+
+    func label(for scope: Scope) -> String {
+        switch scope {
+        case .view: return "当前视图（\(viewRows.formatted()) 行）"
+        case .all: return "全部行（\(allRows.formatted()) 行）"
+        case .selection:
+            return selectedRows.isEmpty
+                ? "选中行（先选中要导出的行）"
+                : "选中行（\(selectedRows.count.formatted()) 行）"
+        }
+    }
+
+    var exportScope: ExportScope {
+        switch scope {
+        case .view: return .view
+        case .all: return .all
+        case .selection: return .rows(selectedRows)
+        }
+    }
+}
+
 struct ContentView: View {
     @ObservedObject var model: WorkspaceModel
     @AppStorage("sidebarShown") private var sidebarShown = true
@@ -33,6 +81,7 @@ struct ContentView: View {
     @StateObject private var sheetPrompt = SheetPromptState()
     @StateObject private var computed = ComputedColumnState()
     @StateObject private var snippets = SQLSnippetStore()
+    @StateObject private var export = ExportSheetState()
 
     var body: some View {
         NavigationSplitView(columnVisibility: columnVisibility) {
@@ -193,6 +242,14 @@ struct ContentView: View {
             .padding(20)
             .frame(width: 360)
         }
+        .sheet(isPresented: $export.isPresented) {
+            ExportSheet(state: export) {
+                export.isPresented = false
+                savePanel()
+            } onCancel: {
+                export.isPresented = false
+            }
+        }
         .overlay(alignment: .bottom) {
             if let error = model.error {
                 ImportErrorCard(error: error) {
@@ -317,6 +374,9 @@ struct ContentView: View {
                     onSortClick: { column, additive in
                         model.toggleSort(entryID: entry.id, column: column, additive: additive)
                     },
+                    onSelectionChange: { rows in
+                        model.updateSelectedRows(rows)
+                    },
                     onError: { error in
                         let importError = (error as? ImportError) ?? ImportError.wrap(error, step: "读取数据")
                         Task { @MainActor in
@@ -349,17 +409,23 @@ struct ContentView: View {
     }
 
     private func exportPanel(entry: WorkspaceModel.Entry) {
+        export.present(entry: entry, selectedRows: model.selectedRows)
+    }
+
+    private func savePanel() {
+        guard let entryID = export.entryID else { return }
+        let scope = export.exportScope
+        let format = export.format
         let panel = NSSavePanel()
         panel.allowedContentTypes = [
             UTType.commaSeparatedText,
             UTType(filenameExtension: "parquet")
         ].compactMap { $0 }
-        let defaultFormat = UserDefaults.standard.string(forKey: "defaultExportFormat") ?? "csv"
-        panel.nameFieldStringValue = "export.\(defaultFormat)"
+        panel.nameFieldStringValue = "export.\(format.rawValue)"
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
-            let format: ExportFormat = url.pathExtension.lowercased() == "parquet" ? .parquet : .csv
-            model.export(entryID: entry.id, to: url, format: format)
+            let chosen: ExportFormat = url.pathExtension.lowercased() == "parquet" ? .parquet : .csv
+            model.export(entryID: entryID, to: url, format: chosen, scope: scope)
         }
     }
 
@@ -372,6 +438,65 @@ struct ContentView: View {
         if panel.runModal() == .OK {
             handleOpen(urls: panel.urls)
         }
+    }
+}
+
+/// 导出确认框：先定范围和格式，再进保存面板。
+private struct ExportSheet: View {
+    @ObservedObject var state: ExportSheetState
+    var onConfirm: () -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("导出").font(.headline)
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(ExportSheetState.Scope.allCases) { scope in
+                    let unavailable = scope == .selection && state.selectedRows.isEmpty
+                    Button {
+                        state.scope = scope
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: state.scope == scope ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(state.scope == scope ? Color.accentColor : Color.secondary)
+                            Text(state.label(for: scope))
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(unavailable)
+                    .opacity(unavailable ? 0.45 : 1)
+                }
+            }
+
+            if state.scope == .selection, state.selectedRows.isEmpty {
+                Text("先在表格里选中要导出的行，这个选项才有内容。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Picker("格式", selection: $state.format) {
+                Text("CSV").tag(ExportFormat.csv)
+                Text("Parquet").tag(ExportFormat.parquet)
+            }
+            .pickerStyle(.segmented)
+
+            Text("导出的列与当前视图一致，计算列不导出。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("取消", action: onCancel)
+                Spacer()
+                Button("导出…", action: onConfirm)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(state.scope == .selection && state.selectedRows.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
     }
 }
 

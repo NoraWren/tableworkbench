@@ -84,6 +84,7 @@ public struct DataGridView: NSViewRepresentable {
     public let sorts: [SortSpec]
     public let provider: (Int, Int) throws -> TableBlock
     public let onSortClick: (String, Bool) -> Void
+    public let onSelectionChange: (IndexSet) -> Void
     public let onError: (Error) -> Void
 
     public init(
@@ -92,6 +93,7 @@ public struct DataGridView: NSViewRepresentable {
         sorts: [SortSpec] = [],
         provider: @escaping (Int, Int) throws -> TableBlock,
         onSortClick: @escaping (String, Bool) -> Void = { _, _ in },
+        onSelectionChange: @escaping (IndexSet) -> Void = { _ in },
         onError: @escaping (Error) -> Void
     ) {
         self.columns = columns
@@ -99,6 +101,7 @@ public struct DataGridView: NSViewRepresentable {
         self.sorts = sorts
         self.provider = provider
         self.onSortClick = onSortClick
+        self.onSelectionChange = onSelectionChange
         self.onError = onError
     }
 
@@ -109,6 +112,7 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.provider = provider
         dataSource.onError = onError
         dataSource.onSortClick = onSortClick
+        dataSource.onSelectionChange = onSelectionChange
         dataSource.computedColumnNames = Set(columns.filter(\.isComputed).map(\.name))
         return dataSource
     }
@@ -159,6 +163,7 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.provider = provider
         dataSource.onError = onError
         dataSource.onSortClick = onSortClick
+        dataSource.onSelectionChange = onSelectionChange
         dataSource.computedColumnNames = Set(columns.filter(\.isComputed).map(\.name))
 
         let changed = dataSource.columns != visibleColumns

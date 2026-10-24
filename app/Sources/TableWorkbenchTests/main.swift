@@ -409,6 +409,47 @@ func run() throws {
     _ = try query.session.export(to: filteredURL, format: .csv)
     let filteredExport = try FileImporter.open(url: filteredURL)
     check("筛选导出 4 行", filteredExport.session.rowCount == 4)
+
+    // 导出范围：全部行忽略筛选，选中行按网格位置
+    let allURL = working.appendingPathComponent("all-rows.csv")
+    let allCount = try query.session.export(to: allURL, format: .csv, scope: .all)
+    let allExport = try FileImporter.open(url: allURL)
+    check("全部行导出 6 行", allCount == 6 && allExport.session.rowCount == 6)
+    allExport.session.close()
+
+    let viewOrder = try query.session.block(offset: 0, size: 5).rows.map { $0[0] }
+    let pickedURL = working.appendingPathComponent("picked-rows.csv")
+    let pickedCount = try query.session.export(to: pickedURL, format: .csv, scope: .rows(IndexSet([0, 2])))
+    let picked = try FileImporter.open(url: pickedURL)
+    let pickedOrder = try picked.session.block(offset: 0, size: 5).rows.map { $0[0] }
+    check("选中行导出行数 2", pickedCount == 2 && picked.session.rowCount == 2)
+    check("选中行顺序与网格一致", pickedOrder == [viewOrder[0], viewOrder[2]])
+    picked.session.close()
+
+    let emptySelectionRejected: Bool
+    do {
+        _ = try query.session.export(to: working.appendingPathComponent("empty.csv"), format: .csv, scope: .rows(IndexSet()))
+        emptySelectionRejected = false
+    } catch {
+        emptySelectionRejected = true
+    }
+    check("空选中行被拒绝", emptySelectionRejected)
+
+    // 排序后再按位置导出，行号跟着视图走
+    try query.session.apply(view: QueryView(sort: [SortSpec(column: "amount", ascending: false)]))
+    let sortedOrder = try query.session.block(offset: 0, size: 5).rows.map { $0[0] }
+    let sortedURL = working.appendingPathComponent("sorted-pick.csv")
+    _ = try query.session.export(to: sortedURL, format: .csv, scope: .rows(IndexSet([1])))
+    let sortedPick = try FileImporter.open(url: sortedURL)
+    check("排序后选中行取第 2 行", try sortedPick.session.block(offset: 0, size: 1).rows.first?[0] == sortedOrder[1])
+    sortedPick.session.close()
+
+    // 选中行导出用完就清理临时表，后面的当前视图导出不受影响
+    let afterPickURL = working.appendingPathComponent("after-pick.csv")
+    _ = try query.session.export(to: afterPickURL, format: .csv, scope: .view)
+    let afterPick = try FileImporter.open(url: afterPickURL)
+    check("选中行导出后视图导出仍 6 行", afterPick.session.rowCount == 6)
+    afterPick.session.close()
     try query.session.apply(view: .empty)
 
     // 计算列
@@ -651,6 +692,10 @@ func run() throws {
     waitFor { MainActor.assumeIsolated { model.statsColumn == "amount" } }
     MainActor.assumeIsolated { model.selection = firstID }
     check("换文件清空列统计", MainActor.assumeIsolated { model.statsColumn == nil && model.columnStats == nil })
+    MainActor.assumeIsolated { model.updateSelectedRows(IndexSet([0, 1])) }
+    check("记录选中行", MainActor.assumeIsolated { model.selectedRows == IndexSet([0, 1]) })
+    MainActor.assumeIsolated { model.selection = secondID }
+    check("换文件清空选中行", MainActor.assumeIsolated { model.selectedRows.isEmpty })
     MainActor.assumeIsolated {
         for entry in model.entries { entry.session.close() }
     }

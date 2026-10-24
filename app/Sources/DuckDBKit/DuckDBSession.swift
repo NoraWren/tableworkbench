@@ -370,6 +370,10 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     }
 
     public func export(to url: URL, format: ExportFormat) throws -> Int {
+        try export(to: url, format: format, scope: .view)
+    }
+
+    public func export(to url: URL, format: ExportFormat, scope: ExportScope) throws -> Int {
         lock.lock()
         defer { lock.unlock() }
 
@@ -377,8 +381,53 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
         }
 
-        let table = hasResultTable ? "\"__result\"" : "\"__base\""
         let columnsSQL = SQLBuilder.columnList(columns)
+        let source: String
+        let expectedRows: Int
+        var snapshotCreated = false
+
+        switch scope {
+        case .view:
+            source = "SELECT \(columnsSQL) FROM \(hasResultTable ? "\"__result\"" : "\"__base\"")"
+            expectedRows = resultCount
+        case .all:
+            source = "SELECT \(columnsSQL) FROM \"__base\""
+            expectedRows = rowCount
+        case .rows(let selected):
+            let valid = selected.filter { $0 >= 0 && $0 < resultCount }
+            guard !valid.isEmpty else {
+                throw ImportError(
+                    userMessage: "没有选中行",
+                    technicalDetail: nil,
+                    recoverySuggestion: "先在表格里选中要导出的行，或者改选当前视图。"
+                )
+            }
+            let viewQuery = currentViewSelect(columnsSQL: columnsSQL)
+            let indices = valid.map(String.init).joined(separator: ",")
+            do {
+                try connection.execute("DROP TABLE IF EXISTS \"__export_rows\"")
+                try connection.execute("""
+                CREATE TEMP TABLE "__export_rows" AS
+                SELECT *, row_number() OVER () - 1 AS "__row" FROM (\(viewQuery)) AS t
+                """)
+                snapshotCreated = true
+            } catch {
+                throw ImportError(
+                    userMessage: "导出失败",
+                    technicalDetail: String(describing: error),
+                    recoverySuggestion: "换一个位置再试。"
+                )
+            }
+            source = "SELECT \(columnsSQL) FROM \"__export_rows\" WHERE \"__row\" IN (\(indices)) ORDER BY \"__row\""
+            expectedRows = valid.count
+        }
+
+        defer {
+            if snapshotCreated {
+                try? connection.execute("DROP TABLE IF EXISTS \"__export_rows\"")
+            }
+        }
+
         let temporary = url.appendingPathExtension("tmp-\(UUID().uuidString)")
         try? FileManager.default.removeItem(at: temporary)
 
@@ -390,7 +439,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         case .parquet:
             options = "FORMAT PARQUET, COMPRESSION SNAPPY"
         }
-        let sql = "COPY (SELECT \(columnsSQL) FROM \(table)) TO '\(destination)' (\(options))"
+        let sql = "COPY (\(source)) TO '\(destination)' (\(options))"
 
         do {
             try connection.execute(sql)
@@ -403,7 +452,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 }
                 try FileManager.default.moveItem(at: temporary, to: url)
             }
-            return resultCount
+            return expectedRows
         } catch {
             try? FileManager.default.removeItem(at: temporary)
             throw ImportError(
@@ -412,6 +461,18 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 recoverySuggestion: "确认目标目录有写权限，换一个位置再试。"
             )
         }
+    }
+
+    /// 当前视图（筛选 + 排序）的完整查询，选中行导出与网格取块用的是同一套条件。
+    private func currentViewSelect(columnsSQL: String) -> String {
+        let table = hasResultTable ? "\"__result\"" : "\"__base\""
+        if hasResultTable {
+            return "SELECT \(columnsSQL) FROM \(table)"
+        }
+        let whereSQL = SQLBuilder.whereClause(view.filter)
+        let orderSQL = SQLBuilder.orderBy(view.sort)
+        let parts = ["SELECT \(columnsSQL) FROM \(table)", whereSQL, orderSQL].filter { !$0.isEmpty }
+        return parts.joined(separator: " ")
     }
 
     /// Excel 只有看到 BOM 才按 UTF-8 打开 CSV，这里在文件头补上，正文按 1MB 流式拷贝。

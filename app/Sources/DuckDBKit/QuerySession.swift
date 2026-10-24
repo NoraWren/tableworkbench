@@ -20,6 +20,8 @@ public protocol QuerySession: AnyObject, Sendable {
     func columnStats(column: String) throws -> ColumnStats
     /// 导出当前视图，返回导出行数。
     func export(to url: URL, format: ExportFormat) throws -> Int
+    /// 按范围导出，返回导出行数。
+    func export(to url: URL, format: ExportFormat, scope: ExportScope) throws -> Int
     /// 添加一个只存在于当前会话的计算列。
     func addComputedColumn(name: String, expression: String) throws
     func block(offset: Int, size: Int) throws -> TableBlock
@@ -33,6 +35,21 @@ public extension QuerySession {
     func block(offset: Int, size: Int, columns: [ColumnInfo]) throws -> TableBlock {
         try block(offset: offset, size: size)
     }
+
+    /// 默认忽略范围，替身会话用不到三种口径。
+    func export(to url: URL, format: ExportFormat, scope: ExportScope) throws -> Int {
+        try export(to: url, format: format)
+    }
+}
+
+/// 导出范围。行号是网格里的位置，从 0 开始。
+public enum ExportScope: Sendable, Equatable {
+    /// 当前筛选与排序结果。
+    case view
+    /// 源表全部行，忽略筛选和排序。
+    case all
+    /// 指定行，顺序按网格显示顺序。
+    case rows(IndexSet)
 }
 
 public enum QuerySessionDefaults {

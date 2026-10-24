@@ -47,6 +47,8 @@ public final class WorkspaceModel: ObservableObject {
             statsColumn = nil
             columnStats = nil
             isLoadingStats = false
+            // 选中行也跟着换，避免把上一份的行号导出去。
+            selectedRows = []
         }
     }
     @Published public private(set) var error: ImportError?
@@ -60,6 +62,8 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var isLoadingStats = false
     @Published public private(set) var isExporting = false
     @Published public private(set) var lastExportMessage: String?
+    /// 网格里当前选中的行，导出“选中行”时用。
+    @Published public private(set) var selectedRows: IndexSet = []
     /// 宽表里用户手动启用的列，按文件记。默认只显示前 200 列。
     @Published private var enabledColumns: [UUID: Set<String>] = [:]
 
@@ -316,7 +320,12 @@ public final class WorkspaceModel: ObservableObject {
         }
     }
 
-    public func export(entryID: UUID, to url: URL, format: ExportFormat) {
+    public func updateSelectedRows(_ rows: IndexSet) {
+        guard rows != selectedRows else { return }
+        selectedRows = rows
+    }
+
+    public func export(entryID: UUID, to url: URL, format: ExportFormat, scope: ExportScope = .view) {
         guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         let session = entries[index].session
         isExporting = true
@@ -325,7 +334,7 @@ public final class WorkspaceModel: ObservableObject {
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> (Int?, ImportError?) in
                 do {
-                    return (try session.export(to: url, format: format), nil)
+                    return (try session.export(to: url, format: format, scope: scope), nil)
                 } catch let importError as ImportError {
                     return (nil, importError)
                 } catch {
@@ -334,7 +343,13 @@ public final class WorkspaceModel: ObservableObject {
             }.value
 
             if let count = outcome.0 {
-                lastExportMessage = "已导出 \(count) 行到 \(url.lastPathComponent)"
+                let scopeName: String
+                switch scope {
+                case .view: scopeName = "当前视图"
+                case .all: scopeName = "全部行"
+                case .rows: scopeName = "选中行"
+                }
+                lastExportMessage = "已导出\(scopeName) \(count) 行到 \(url.lastPathComponent)"
             } else {
                 error = outcome.1
             }
