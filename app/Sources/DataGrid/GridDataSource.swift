@@ -50,10 +50,7 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
 
         if tableColumn.identifier.rawValue == "row-number" {
             let cell = reusableCell(in: tableView)
-            cell.textField?.stringValue = String(row + 1)
-            cell.textField?.alignment = .right
-            cell.textField?.textColor = .secondaryLabelColor
-            cell.textField?.toolTip = nil
+            cell.configure(text: String(row + 1), alignment: .right, color: .secondaryLabelColor)
             return cell
         }
 
@@ -64,30 +61,20 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
         let value = cellValue(row: row, columnIndex: columnIndex)
 
         let cell = reusableCell(in: tableView)
-        cell.textField?.stringValue = value ?? "NULL"
-        cell.textField?.alignment = info.kind.isNumeric ? .right : .left
-        cell.textField?.textColor = value == nil ? .tertiaryLabelColor : .labelColor
-        cell.textField?.toolTip = value
+        cell.configure(
+            text: value ?? "NULL",
+            alignment: info.kind.isNumeric ? .right : .left,
+            color: value == nil ? .tertiaryLabelColor : .labelColor
+        )
         return cell
     }
 
-    private func reusableCell(in tableView: NSTableView) -> NSTableCellView {
-        if let cell = tableView.makeView(withIdentifier: cellIdentifier, owner: self) as? NSTableCellView {
+    private func reusableCell(in tableView: NSTableView) -> GridTextCellView {
+        if let cell = tableView.makeView(withIdentifier: cellIdentifier, owner: self) as? GridTextCellView {
             return cell
         }
-        let cell = NSTableCellView()
+        let cell = GridTextCellView()
         cell.identifier = cellIdentifier
-        let field = NSTextField(labelWithString: "")
-        field.translatesAutoresizingMaskIntoConstraints = false
-        field.lineBreakMode = .byTruncatingTail
-        field.font = .monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-        cell.addSubview(field)
-        cell.textField = field
-        NSLayoutConstraint.activate([
-            field.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 6),
-            field.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -6),
-            field.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
-        ])
         return cell
     }
 
