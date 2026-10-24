@@ -10,6 +10,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     private var view: QueryView = .empty
     private var hasResultTable = false
     private var computedColumns: [(name: String, expression: String)] = []
+    /// 按列缓存统计，配 generation 判断是否失效。
+    private var statsCache: [String: (generation: Int, stats: ColumnStats)] = [:]
     private var database: Database?
     private var connection: Connection?
     private let temporaryDirectory: URL
@@ -223,18 +225,26 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         guard let info = columns.first(where: { $0.name == column }) else {
             throw ImportError(userMessage: "列不存在", technicalDetail: column, recoverySuggestion: "重新选择一列。")
         }
+        // 同一份数据、同一代查询里算过的列直接用缓存，切回来不再扫表。
+        if let cached = statsCache[column], cached.generation == generation {
+            return cached.stats
+        }
 
         let table = hasResultTable ? "\"__result\"" : "\"__base\""
         let identifier = SQLBuilder.quoteIdentifier(column)
         let numeric = "TRY_CAST(\(identifier) AS DOUBLE)"
 
         do {
-            let aggregate = try connection.query("""
+            var aggregateSelect = """
             SELECT count(*), count(\(identifier)), count(DISTINCT \(identifier)),
                    CAST(min(\(identifier)) AS VARCHAR), CAST(max(\(identifier)) AS VARCHAR),
                    avg(\(numeric)), median(\(numeric)), stddev_pop(\(numeric))
-            FROM \(table)
-            """)
+            """
+            if info.kind == .text {
+                aggregateSelect += ",\n                   min(length(\(identifier))), max(length(\(identifier))),\n                   count(*) FILTER (WHERE \(identifier) <> trim(\(identifier)))"
+            }
+            aggregateSelect += "\nFROM \(table)"
+            let aggregate = try connection.query(aggregateSelect)
             let total = Int(aggregate.column(at: 0).cast(to: Int64.self)[0] ?? 0)
             let nonNull = Int(aggregate.column(at: 1).cast(to: Int64.self)[0] ?? 0)
             let distinct = Int(aggregate.column(at: 2).cast(to: Int64.self)[0] ?? 0)
@@ -243,6 +253,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             let mean = aggregate.column(at: 5).cast(to: Double.self)[0]
             let median = aggregate.column(at: 6).cast(to: Double.self)[0]
             let deviation = aggregate.column(at: 7).cast(to: Double.self)[0]
+            let minLength = info.kind == .text ? Int(aggregate.column(at: 8).cast(to: Int64.self)[0] ?? 0) : nil
+            let maxLength = info.kind == .text ? Int(aggregate.column(at: 9).cast(to: Int64.self)[0] ?? 0) : nil
+            let whitespaceCount = info.kind == .text ? Int(aggregate.column(at: 10).cast(to: Int64.self)[0] ?? 0) : nil
 
             var topValues: [TopValue] = []
             let top = try connection.query("""
@@ -326,7 +339,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 }
             }
 
-            return ColumnStats(
+            let stats = ColumnStats(
                 column: column,
                 typeName: info.typeName,
                 kind: info.kind,
@@ -342,8 +355,13 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 histogram: histogram,
                 timeBuckets: timeBuckets,
                 numericCount: numericCount,
-                nonNumericExamples: nonNumericExamples
+                nonNumericExamples: nonNumericExamples,
+                minLength: minLength,
+                maxLength: maxLength,
+                whitespaceCount: whitespaceCount
             )
+            statsCache[column] = (generation, stats)
+            return stats
         } catch let error as ImportError {
             throw error
         } catch {

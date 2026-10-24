@@ -298,6 +298,12 @@ func run() throws {
     check("直方图 20 桶且计数 6", amountStats.histogram.count == 20 && amountStats.histogram.reduce(0) { $0 + $1.count } == 6)
 
     let cityStats = try query.session.columnStats(column: "city")
+    let nameStats = try query.session.columnStats(column: "name")
+    check("文本最短长度 1", nameStats.minLength == 1)
+    check("文本最长长度 7", nameStats.maxLength == 7)
+    check("无首尾空白", nameStats.whitespaceCount == 0)
+    let nameStatsAgain = try query.session.columnStats(column: "name")
+    check("统计缓存命中", nameStatsAgain.totalRows == nameStats.totalRows && nameStatsAgain.maxLength == 7)
     check("城市高频值第一", cityStats.topValues.first?.value == "上海" && cityStats.topValues.first?.count == 4)
 
     let nullStats = try opened.session.columnStats(column: "备注")

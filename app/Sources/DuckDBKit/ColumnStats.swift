@@ -49,6 +49,9 @@ public struct ColumnStats: Sendable {
     public let timeBuckets: [TimeBucket]
     public let numericCount: Int
     public let nonNumericExamples: [String]
+    public let minLength: Int?
+    public let maxLength: Int?
+    public let whitespaceCount: Int?
 
     public init(
         column: String,
@@ -66,7 +69,10 @@ public struct ColumnStats: Sendable {
         histogram: [HistogramBucket] = [],
         timeBuckets: [TimeBucket] = [],
         numericCount: Int = 0,
-        nonNumericExamples: [String] = []
+        nonNumericExamples: [String] = [],
+        minLength: Int? = nil,
+        maxLength: Int? = nil,
+        whitespaceCount: Int? = nil
     ) {
         self.column = column
         self.typeName = typeName
@@ -84,6 +90,9 @@ public struct ColumnStats: Sendable {
         self.timeBuckets = timeBuckets
         self.numericCount = numericCount
         self.nonNumericExamples = nonNumericExamples
+        self.minLength = minLength
+        self.maxLength = maxLength
+        self.whitespaceCount = whitespaceCount
     }
 
     public var conflictCount: Int {

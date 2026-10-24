@@ -530,6 +530,12 @@ private struct InspectorView: View {
         if let deviation = stats.standardDeviation {
             LabeledContent("标准差", value: format(deviation))
         }
+        if let minLength = stats.minLength, let maxLength = stats.maxLength {
+            LabeledContent("文本长度", value: "\(minLength) ~ \(maxLength)")
+        }
+        if let whitespace = stats.whitespaceCount {
+            LabeledContent("含首尾空白", value: "\(whitespace) 行")
+        }
         if stats.kind == .text, stats.numericCount > 0, stats.conflictCount > 0 {
             VStack(alignment: .leading, spacing: 2) {
                 Text("类型冲突")
