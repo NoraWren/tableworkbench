@@ -81,18 +81,24 @@ public struct DataGridView: NSViewRepresentable {
 
     public let columns: [ColumnInfo]
     public let rowCount: Int
+    public let sorts: [SortSpec]
     public let provider: (Int, Int) throws -> TableBlock
+    public let onSortClick: (String, Bool) -> Void
     public let onError: (Error) -> Void
 
     public init(
         columns: [ColumnInfo],
         rowCount: Int,
+        sorts: [SortSpec] = [],
         provider: @escaping (Int, Int) throws -> TableBlock,
+        onSortClick: @escaping (String, Bool) -> Void = { _, _ in },
         onError: @escaping (Error) -> Void
     ) {
         self.columns = columns
         self.rowCount = rowCount
+        self.sorts = sorts
         self.provider = provider
+        self.onSortClick = onSortClick
         self.onError = onError
     }
 
@@ -102,6 +108,7 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.rowCount = rowCount
         dataSource.provider = provider
         dataSource.onError = onError
+        dataSource.onSortClick = onSortClick
         return dataSource
     }
 
@@ -150,10 +157,14 @@ public struct DataGridView: NSViewRepresentable {
         let dataSource = context.coordinator
         dataSource.provider = provider
         dataSource.onError = onError
+        dataSource.onSortClick = onSortClick
 
-        let changed = dataSource.columns != visibleColumns || dataSource.rowCount != rowCount
+        let changed = dataSource.columns != visibleColumns
+            || dataSource.rowCount != rowCount
+            || dataSource.sorts != sorts
         dataSource.columns = visibleColumns
         dataSource.rowCount = rowCount
+        dataSource.sorts = sorts
 
         if changed, let tableView = dataSource.contentTableView {
             rebuildColumns(tableView)
@@ -167,13 +178,24 @@ public struct DataGridView: NSViewRepresentable {
         }
         for info in visibleColumns {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(info.displayName))
-            column.title = info.displayName
+            column.title = title(for: info)
             column.width = preferredWidth(for: info)
             column.minWidth = 60
             column.maxWidth = 420
             tableView.addTableColumn(column)
         }
         tableView.reloadData()
+    }
+
+    private func title(for info: ColumnInfo) -> String {
+        guard let index = sorts.firstIndex(where: { $0.column == info.name }) else {
+            return info.displayName
+        }
+        let arrow = sorts[index].ascending ? "↑" : "↓"
+        if sorts.count == 1 {
+            return "\(info.displayName) \(arrow)"
+        }
+        return "\(info.displayName) \(arrow)\(index + 1)"
     }
 
     private var visibleColumns: [ColumnInfo] {

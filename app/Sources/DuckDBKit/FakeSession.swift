@@ -4,6 +4,8 @@ import Foundation
 public final class FakeSession: QuerySession, @unchecked Sendable {
     public let columns: [ColumnInfo]
     public let rowCount: Int
+    public private(set) var resultCount: Int
+    public private(set) var generation: Int = 0
     private let lock = NSLock()
     private var closed = false
 
@@ -15,6 +17,12 @@ public final class FakeSession: QuerySession, @unchecked Sendable {
             ColumnInfo(name: "created_at", displayName: "created_at", typeName: "TIMESTAMP", kind: .timestamp)
         ]
         self.rowCount = rowCount
+        self.resultCount = rowCount
+    }
+
+    public func apply(view: QueryView) throws {
+        generation += 1
+        resultCount = rowCount
     }
 
     public func block(offset: Int, size: Int) throws -> TableBlock {

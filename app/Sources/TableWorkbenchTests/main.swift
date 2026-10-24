@@ -132,6 +132,65 @@ func run() throws {
     }
     check("伪装成 CSV 的二进制被拒绝", rejected)
 
+    // 排序与筛选
+    let queryCSV = working.appendingPathComponent("query.csv")
+    let queryText = "name,amount,city\na,100,上海\nb,50,北京\nc,200,上海\nd,30,广州\ne,300,上海\nO'Brien,400,上海\n"
+    try queryText.write(to: queryCSV, atomically: true, encoding: .utf8)
+    let query = try FileImporter.open(url: queryCSV)
+    check("查询样本 6 行", query.session.rowCount == 6)
+
+    try query.session.apply(view: QueryView(sort: [SortSpec(column: "amount", ascending: true)]))
+    check("排序后结果数不变", query.session.resultCount == 6)
+    check("升序首行 d", try query.session.block(offset: 0, size: 1).rows.first?.first == "d")
+    check("查询代次自增", query.session.generation == 1)
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "上海")
+    ])))
+    check("筛选上海 4 行", query.session.resultCount == 4)
+    check("筛选首行 a", try query.session.block(offset: 0, size: 1).rows.first?.first == "a")
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "上海"),
+        FilterCondition(column: "amount", op: .greaterThan, value: "150")
+    ])))
+    check("AND 结果 3 行", query.session.resultCount == 3)
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .or, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "北京"),
+        FilterCondition(column: "amount", op: .greaterThan, value: "150")
+    ])))
+    check("OR 结果 4 行", query.session.resultCount == 4)
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "name", op: .equal, value: "O'Brien")
+    ])))
+    check("单引号值可查询", query.session.resultCount == 1)
+
+    try query.session.apply(view: QueryView(
+        sort: [SortSpec(column: "amount", ascending: false)],
+        filter: FilterGroup(join: .and, conditions: [FilterCondition(column: "city", op: .equal, value: "上海")])
+    ))
+    check("排序加筛选 4 行", query.session.resultCount == 4)
+    check("降序首行 O'Brien", try query.session.block(offset: 0, size: 1).rows.first?.first == "O'Brien")
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "不存在")
+    ])))
+    check("空结果 0 行", query.session.resultCount == 0)
+    check("空结果块为空", try query.session.block(offset: 0, size: 10).rows.isEmpty)
+
+    let escaped = SQLBuilder.conditionSQL(FilterCondition(column: "name", op: .equal, value: "O'Brien"))
+    check("SQL 转义单引号", escaped == "\"name\" = 'O''Brien'")
+    check("数字不加引号", SQLBuilder.literal("150") == "150")
+    check(
+        "多列排序 SQL",
+        SQLBuilder.orderBy([
+            SortSpec(column: "amount", ascending: false),
+            SortSpec(column: "city", ascending: true)
+        ]) == "ORDER BY \"amount\" DESC, \"city\" ASC"
+    )
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {

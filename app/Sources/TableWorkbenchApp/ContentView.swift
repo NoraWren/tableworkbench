@@ -5,10 +5,15 @@ import Features
 import DataGrid
 import DuckDBKit
 
+private final class PopoverState: ObservableObject {
+    @Published var filterShown = false
+}
+
 struct ContentView: View {
     @ObservedObject var model: WorkspaceModel
     @AppStorage("inspectorShown") private var inspectorShown = true
     @AppStorage("sqlShown") private var sqlShown = false
+    @StateObject private var popover = PopoverState()
 
     var body: some View {
         NavigationSplitView {
@@ -31,6 +36,21 @@ struct ContentView: View {
                     }
                     .keyboardShortcut("o", modifiers: .command)
                     .help("打开 CSV 或 TSV（Command+O）")
+
+                    if let entry = model.selectedEntry {
+                        Button {
+                            popover.filterShown.toggle()
+                        } label: {
+                            Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
+                        }
+                        .help("添加筛选条件")
+                        .popover(isPresented: $popover.filterShown, arrowEdge: .bottom) {
+                            FilterPanel(columns: entry.columns, initial: entry.filter) { filter in
+                                model.applyFilter(entryID: entry.id, filter: filter)
+                                popover.filterShown = false
+                            }
+                        }
+                    }
 
                     Button {
                         sqlShown.toggle()
@@ -93,11 +113,36 @@ struct ContentView: View {
                     .padding(.vertical, 5)
                     .background(.quaternary)
                 }
+                HStack(spacing: 8) {
+                    Text(entry.filter == nil
+                         ? "\(entry.rowCount) 行"
+                         : "\(entry.rowCount) 行中的 \(entry.resultCount) 行")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if model.isQuerying {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+
+                if entry.resultCount == 0 {
+                    Text("没有匹配的行")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                 DataGridView(
                     columns: entry.columns,
-                    rowCount: entry.rowCount,
+                    rowCount: entry.resultCount,
+                    sorts: entry.sort,
                     provider: { offset, size in
                         try entry.session.block(offset: offset, size: size)
+                    },
+                    onSortClick: { column, additive in
+                        model.toggleSort(entryID: entry.id, column: column, additive: additive)
                     },
                     onError: { error in
                         let importError = (error as? ImportError) ?? ImportError.wrap(error, step: "读取数据")
@@ -106,8 +151,9 @@ struct ContentView: View {
                         }
                     }
                 )
-                .id(entry.id)
+                .id("\(entry.id)-\(entry.queryVersion)")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         } else {
             EmptyStateView()

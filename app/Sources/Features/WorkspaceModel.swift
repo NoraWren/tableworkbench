@@ -9,12 +9,17 @@ public final class WorkspaceModel: ObservableObject {
         public let url: URL
         public let session: QuerySession
         public let encoding: TextEncoding
+        public var sort: [SortSpec] = []
+        public var filter: FilterGroup?
+        public var resultCount: Int
+        public var queryVersion: Int = 0
 
         public init(id: UUID = UUID(), url: URL, session: QuerySession, encoding: TextEncoding) {
             self.id = id
             self.url = url
             self.session = session
             self.encoding = encoding
+            self.resultCount = session.rowCount
         }
 
         public var displayName: String { url.lastPathComponent }
@@ -26,6 +31,7 @@ public final class WorkspaceModel: ObservableObject {
     @Published public var selection: UUID?
     @Published public private(set) var error: ImportError?
     @Published public private(set) var isLoading = false
+    @Published public private(set) var isQuerying = false
 
     public init() {}
 
@@ -62,6 +68,66 @@ public final class WorkspaceModel: ObservableObject {
             }
             error = result.error
             isLoading = false
+        }
+    }
+
+    public func toggleSort(entryID: UUID, column: String, additive: Bool) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        var sorts = entries[index].sort
+
+        if additive {
+            if let position = sorts.firstIndex(where: { $0.column == column }) {
+                if sorts[position].ascending {
+                    sorts[position] = SortSpec(column: column, ascending: false)
+                } else {
+                    sorts.remove(at: position)
+                }
+            } else {
+                sorts.append(SortSpec(column: column, ascending: true))
+            }
+        } else {
+            if sorts.count == 1, sorts[0].column == column {
+                sorts = sorts[0].ascending
+                    ? [SortSpec(column: column, ascending: false)]
+                    : []
+            } else {
+                sorts = [SortSpec(column: column, ascending: true)]
+            }
+        }
+
+        apply(view: QueryView(sort: sorts, filter: entries[index].filter), to: index)
+    }
+
+    public func applyFilter(entryID: UUID, filter: FilterGroup?) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        apply(view: QueryView(sort: entries[index].sort, filter: filter), to: index)
+    }
+
+    private func apply(view: QueryView, to index: Int) {
+        let session = entries[index].session
+        isQuerying = true
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (count: Int?, error: ImportError?) in
+                do {
+                    try session.apply(view: view)
+                    return (session.resultCount, nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "执行查询"))
+                }
+            }.value
+
+            if let count = outcome.count {
+                entries[index].sort = view.sort
+                entries[index].filter = view.filter
+                entries[index].resultCount = count
+                entries[index].queryVersion += 1
+            } else {
+                error = outcome.error
+            }
+            isQuerying = false
         }
     }
 

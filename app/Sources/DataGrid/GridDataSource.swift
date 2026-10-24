@@ -8,6 +8,8 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
     var blockSize: Int = QuerySessionDefaults.blockSize
     var provider: ((Int, Int) throws -> TableBlock)?
     var onError: ((Error) -> Void)?
+    var onSortClick: ((String, Bool) -> Void)?
+    var sorts: [SortSpec] = []
     weak var contentTableView: NSTableView?
     weak var rowNumbersView: NSView?
 
@@ -16,6 +18,11 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
 
     public func numberOfRows(in tableView: NSTableView) -> Int {
         rowCount
+    }
+
+    public func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
+        let additive = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+        onSortClick?(tableColumn.identifier.rawValue, additive)
     }
 
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {

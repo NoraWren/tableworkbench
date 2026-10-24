@@ -5,6 +5,9 @@ import Foundation
 public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public let columns: [ColumnInfo]
     public let rowCount: Int
+    public private(set) var resultCount: Int
+    public private(set) var generation: Int = 0
+    private var view: QueryView = .empty
 
     private let viewName = "data"
     private var database: Database?
@@ -17,6 +20,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         self.connection = connection
         self.columns = columns
         self.rowCount = rowCount
+        self.resultCount = rowCount
     }
 
     deinit {
@@ -79,6 +83,39 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         }
     }
 
+    public func apply(view: QueryView) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+
+        let known = Set(columns.map(\.name))
+        for spec in view.sort where !known.contains(spec.column) {
+            throw ImportError(userMessage: "排序列不存在", technicalDetail: spec.column, recoverySuggestion: "重新选择一个列。")
+        }
+        if let filter = view.filter {
+            for condition in filter.conditions where !known.contains(condition.column) {
+                throw ImportError(userMessage: "筛选列不存在", technicalDetail: condition.column, recoverySuggestion: "重新选择一个列。")
+            }
+        }
+
+        let whereSQL = SQLBuilder.whereClause(view.filter)
+        do {
+            if whereSQL.isEmpty {
+                resultCount = rowCount
+            } else {
+                let counted = try connection.query("SELECT count(*) FROM \"data\" \(whereSQL)")
+                resultCount = Int(counted.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+            }
+            self.view = view
+            generation += 1
+        } catch {
+            throw ImportError.wrap(error, step: "执行筛选")
+        }
+    }
+
     public func block(offset: Int, size: Int) throws -> TableBlock {
         lock.lock()
         defer { lock.unlock() }
@@ -93,10 +130,18 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
         let safeOffset = max(0, offset)
         let safeSize = max(0, size)
-        let selectList = columns
-            .map { "CAST(\(Self.quoteIdentifier($0.name)) AS VARCHAR)" }
-            .joined(separator: ", ")
-        let sql = "SELECT \(selectList) FROM \"data\" LIMIT \(safeSize) OFFSET \(safeOffset)"
+        if resultCount == 0 || safeOffset >= resultCount {
+            return TableBlock(offset: safeOffset, rows: [])
+        }
+        let selectList = SQLBuilder.selectList(columns)
+        let whereSQL = SQLBuilder.whereClause(view.filter)
+        let orderSQL = SQLBuilder.orderBy(view.sort)
+        let sql = [
+            "SELECT \(selectList) FROM \"data\"",
+            whereSQL,
+            orderSQL,
+            "LIMIT \(safeSize) OFFSET \(safeOffset)"
+        ].filter { !$0.isEmpty }.joined(separator: " ")
 
         do {
             let result = try connection.query(sql)
