@@ -431,7 +431,11 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         }
 
         let table = hasResultTable ? "\"__result\"" : "\"__base\""
-        let rowSQL = spec.rows.map(SQLBuilder.quoteIdentifier).joined(separator: ", ")
+        let rowSQL = spec.rows.map(pivotLabel).joined(separator: ", ")
+        let rowAliases = spec.rows.map(SQLBuilder.quoteIdentifier).joined(separator: ", ")
+        let rowSelect = spec.rows
+            .map { "\(pivotLabel($0)) AS \(SQLBuilder.quoteIdentifier($0))" }
+            .joined(separator: ", ")
         let started = Foundation.Date()
 
         do {
@@ -447,17 +451,16 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 )
             }
 
-            var selectParts = spec.rows.map(SQLBuilder.quoteIdentifier)
+            var selectParts = [rowSelect]
             if spec.columns.isEmpty {
                 for value in spec.values {
                     selectParts.append("\(aggregateSQL(value, condition: nil)) AS \(SQLBuilder.quoteIdentifier(value.title))")
                 }
             } else {
-                let columnSQL = spec.columns.map { "CAST(\(SQLBuilder.quoteIdentifier($0)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier($0))" }
+                let columnSQL = spec.columns.map { "\(pivotLabel($0)) AS \(SQLBuilder.quoteIdentifier($0))" }
                     .joined(separator: ", ")
-                let conditions = spec.columns.map { "\(SQLBuilder.quoteIdentifier($0)) IS NOT NULL" }.joined(separator: " AND ")
                 let combosResult = try connection.query(
-                    "SELECT DISTINCT \(columnSQL) FROM \(table) WHERE \(conditions) LIMIT 201"
+                    "SELECT DISTINCT \(columnSQL) FROM \(table) LIMIT 201"
                 )
                 let comboCount = Int(combosResult.rowCount)
                 guard comboCount <= 200 else {
@@ -488,7 +491,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 for value in spec.values {
                     for combo in combos {
                         let condition = zip(spec.columns, combo)
-                            .map { "\(SQLBuilder.quoteIdentifier($0.0)) = \(SQLBuilder.literal($0.1))" }
+                            .map { "\(pivotLabel($0.0)) = \(SQLBuilder.literal($0.1))" }
                             .joined(separator: " AND ")
                         let name = "\(value.title) / \(combo.joined(separator: " / "))"
                         selectParts.append("\(aggregateSQL(value, condition: condition)) AS \(SQLBuilder.quoteIdentifier(name))")
@@ -496,7 +499,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 }
             }
 
-            let sql = "SELECT \(selectParts.joined(separator: ", ")) FROM \(table) GROUP BY \(rowSQL) ORDER BY \(rowSQL)"
+            let sql = "SELECT \(selectParts.joined(separator: ", ")) FROM \(table) GROUP BY \(rowSQL) ORDER BY \(rowAliases)"
             return try executeSelect(sql, connection: connection, started: started)
         } catch let error as ImportError {
             throw error
@@ -520,6 +523,12 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         case .minimum: return "MIN(\(inner))"
         case .maximum: return "MAX(\(inner))"
         }
+    }
+
+    /// 透视表里 NULL 显示为 (空)，空字符串显示为 (空白)，两者不合并。
+    private func pivotLabel(_ column: String) -> String {
+        let identifier = SQLBuilder.quoteIdentifier(column)
+        return "CASE WHEN \(identifier) IS NULL THEN '(空)' WHEN CAST(\(identifier) AS VARCHAR) = '' THEN '(空白)' ELSE CAST(\(identifier) AS VARCHAR) END"
     }
 
     public func runSQL(_ sql: String) throws -> SQLResult {

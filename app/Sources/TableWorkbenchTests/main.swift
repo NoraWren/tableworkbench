@@ -289,6 +289,26 @@ func run() throws {
     do { _ = try query.session.pivot(spec: PivotSpec(rows: ["city"])) } catch { pivotInvalid = true }
     check("缺值字段被拒绝", pivotInvalid)
 
+    // 透视里的 NULL 与空字符串分开显示
+    let nullCSV = working.appendingPathComponent("nulls.csv")
+    try "name,city,amount\na,,1\nb,,2\nc,上海,3\nd,上海,4\ne,\"\",5\n".write(to: nullCSV, atomically: true, encoding: .utf8)
+    let nullSession = try FileImporter.open(url: nullCSV)
+    let nullPivot = try nullSession.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    let labels = nullPivot.rows.compactMap { $0.first }
+    check("透视含 (空)", labels.contains("(空)"))
+    check("透视含 上海", labels.contains("上海"))
+    let nullCross = try nullSession.session.pivot(spec: PivotSpec(
+        rows: ["name"],
+        columns: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    check("交叉表保留空值列", nullCross.columns.count == 3)
+    check("交叉表空值列名", nullCross.columns.contains { $0.displayName.contains("(空)") })
+    nullSession.session.close()
+
     // 列统计与导出
     let amountStats = try query.session.columnStats(column: "amount")
     check("金额统计总数 6", amountStats.totalRows == 6 && amountStats.nullCount == 0 && amountStats.distinctCount == 6)
