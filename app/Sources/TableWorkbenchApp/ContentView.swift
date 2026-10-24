@@ -14,6 +14,7 @@ struct ContentView: View {
     @AppStorage("inspectorShown") private var inspectorShown = true
     @AppStorage("sqlShown") private var sqlShown = false
     @StateObject private var popover = PopoverState()
+    @StateObject private var sql = SQLState()
 
     var body: some View {
         NavigationSplitView {
@@ -25,8 +26,12 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if sqlShown {
                     Divider()
-                    SQLDrawerPlaceholder()
-                        .frame(height: 140)
+                    SQLEditor(state: sql, isRunning: model.isRunningSQL) {
+                        if let entry = model.selectedEntry {
+                            model.runSQL(entryID: entry.id, sql: sql.text)
+                        }
+                    }
+                    .frame(height: 160)
                 }
             }
             .toolbar {
@@ -100,7 +105,11 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if let entry = model.selectedEntry {
+        if let result = model.sqlResult {
+            SQLResultView(result: result) {
+                model.clearSQLResult()
+            }
+        } else if let entry = model.selectedEntry {
             VStack(spacing: 0) {
                 if entry.columns.count > DataGridView.maxVisibleColumns {
                     HStack(spacing: 6) {
@@ -266,27 +275,5 @@ private struct InspectorView: View {
             }
         }
         .listStyle(.sidebar)
-    }
-}
-
-private struct SQLDrawerPlaceholder: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("SQL")
-                    .font(.headline)
-                Text("抽屉已就位，编辑器与只读执行在下一个 change 接入")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            Text("SELECT * FROM data LIMIT 100")
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(8)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-        }
-        .padding(12)
     }
 }

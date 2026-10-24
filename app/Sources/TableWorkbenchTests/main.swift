@@ -191,6 +191,43 @@ func run() throws {
         ]) == "ORDER BY \"amount\" DESC, \"city\" ASC"
     )
 
+    // SQL 抽屉
+    let countResult = try query.session.runSQL("SELECT count(*) FROM data")
+    check("SQL 返回总行数", countResult.rows.first?.first == "6")
+    check("SQL 列数 1", countResult.columns.count == 1)
+
+    let sortedSQL = try query.session.runSQL("SELECT name, amount FROM data ORDER BY amount DESC")
+    check("SQL 列顺序", sortedSQL.columns.map(\.name) == ["name", "amount"])
+    check("SQL 首行 O'Brien", sortedSQL.rows.first?.first == "O'Brien")
+
+    let described = try query.session.runSQL("DESCRIBE SELECT * FROM data")
+    check("DESCRIBE 返回 3 列", described.rowCount == 3)
+
+    var dropRejected = false
+    do { _ = try query.session.runSQL("DROP TABLE data") } catch { dropRejected = true }
+    check("SQL 写语句被拒绝", dropRejected)
+
+    var syntaxRejected = false
+    do { _ = try query.session.runSQL("SELEC * FROM data") } catch { syntaxRejected = true }
+    check("SQL 语法错误被拒绝", syntaxRejected)
+
+    let emptySQL = try query.session.runSQL("SELECT * FROM data WHERE 1 = 0")
+    check("SQL 空结果 0 行", emptySQL.rowCount == 0)
+
+    let tempCreated = try query.session.runSQL("CREATE TEMP TABLE t AS SELECT 1 AS a")
+    check("CREATE TEMP 成功", tempCreated.rowCount == 0)
+    let tempRead = try query.session.runSQL("SELECT * FROM t")
+    check("临时表可查询", tempRead.rows.first?.first == "1")
+
+    let truncated = try query.session.runSQL("SELECT * FROM range(100001)")
+    check("SQL 结果截断到 10 万", truncated.rowCount == 100000 && truncated.truncated)
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "上海")
+    ])))
+    let totalAfterFilter = try query.session.runSQL("SELECT count(*) FROM data")
+    check("data 视图不受筛选影响", totalAfterFilter.rows.first?.first == "6")
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {

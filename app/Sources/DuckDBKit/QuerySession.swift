@@ -10,6 +10,8 @@ public protocol QuerySession: AnyObject, Sendable {
     /// 查询代次，排序或筛选变化时自增，用于让块缓存失效。
     var generation: Int { get }
     func apply(view: QueryView) throws
+    /// 执行一条用户 SQL，结果最多 100000 行。
+    func runSQL(_ sql: String) throws -> SQLResult
     func block(offset: Int, size: Int) throws -> TableBlock
     func close()
 }

@@ -48,6 +48,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             SELECT * FROM read_csv_auto('\(path)', delim='\(delimiterLiteral)', header=\(header), auto_detect=true)
             """
             try connection.execute(createTable)
+            try connection.execute("CREATE VIEW \"data\" AS SELECT * FROM \"__base\"")
 
             let described = try connection.query("DESCRIBE SELECT * FROM \"__base\"")
             let nameColumn = described.column(at: 0).cast(to: String.self)
@@ -142,6 +143,127 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         } catch {
             throw ImportError.wrap(error, step: "执行筛选")
         }
+    }
+
+    public func runSQL(_ sql: String) throws -> SQLResult {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+
+        var statement = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        while statement.hasSuffix(";") {
+            statement.removeLast()
+            statement = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !statement.isEmpty else {
+            throw ImportError(userMessage: "SQL 是空的", technicalDetail: nil, recoverySuggestion: "写一条 SELECT 再运行。")
+        }
+
+        try SQLGuard.validate(statement)
+
+        let keyword = statement
+            .split(whereSeparator: { $0.isWhitespace })
+            .first
+            .map { String($0).uppercased() } ?? ""
+
+        let started = Foundation.Date()
+        do {
+            switch keyword {
+            case "SELECT", "WITH":
+                return try executeSelect(statement, connection: connection, started: started)
+            case "DESCRIBE", "SUMMARIZE":
+                return try executeSelect(statement, connection: connection, started: started, applyLimit: false)
+            case "CREATE":
+                guard statement.uppercased().hasPrefix("CREATE TEMP") else {
+                    throw ImportError(
+                        userMessage: "只允许创建临时表或临时视图",
+                        technicalDetail: "CREATE 语句必须以 CREATE TEMP 开头",
+                        recoverySuggestion: "改用 CREATE TEMP TABLE。"
+                    )
+                }
+                try connection.execute(statement)
+                return SQLResult(columns: [], rows: [], rowCount: 0, elapsed: Foundation.Date().timeIntervalSince(started), truncated: false)
+            default:
+                throw ImportError(
+                    userMessage: "只支持查询语句",
+                    technicalDetail: "语句以 \(keyword) 开头",
+                    recoverySuggestion: "用 SELECT、WITH、DESCRIBE 或 SUMMARIZE。"
+                )
+            }
+        } catch let error as ImportError {
+            throw error
+        } catch {
+            throw ImportError(
+                userMessage: "SQL 执行失败",
+                technicalDetail: String(describing: error),
+                recoverySuggestion: "检查语法和列名后重试。"
+            )
+        }
+    }
+
+    private func executeSelect(
+        _ statement: String,
+        connection: Connection,
+        started: Foundation.Date,
+        applyLimit: Bool = true
+    ) throws -> SQLResult {
+        let maxRows = 100_000
+        var columnNames: [String] = []
+        if applyLimit {
+            let described = try connection.query("DESCRIBE \(statement)")
+            let nameColumn = described.column(at: 0).cast(to: String.self)
+            for index in 0..<Int(described.rowCount) {
+                columnNames.append(nameColumn[DBInt(index)] ?? "column_\(index + 1)")
+            }
+        }
+
+        let projection = columnNames.isEmpty
+            ? "*"
+            : columnNames.map {
+                "CAST(\(SQLBuilder.quoteIdentifier($0)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier($0))"
+            }.joined(separator: ", ")
+        let query = applyLimit
+            ? "SELECT \(projection) FROM (\(statement)) AS __sql LIMIT \(maxRows + 1)"
+            : statement
+        let result = try connection.query(query)
+
+        let columnCount = Int(result.columnCount)
+        var columns: [ColumnInfo] = []
+        columns.reserveCapacity(columnCount)
+        for index in 0..<columnCount {
+            let name = result.columnName(at: DBInt(index))
+            columns.append(ColumnInfo(name: name, displayName: name, typeName: "VARCHAR", kind: .text))
+        }
+
+        let total = Int(result.rowCount)
+        let keep = min(total, maxRows)
+        var typed: [Column<String>] = []
+        typed.reserveCapacity(columnCount)
+        for index in 0..<columnCount {
+            typed.append(result.column(at: DBInt(index)).cast(to: String.self))
+        }
+
+        var rows: [[String?]] = []
+        rows.reserveCapacity(keep)
+        for rowIndex in 0..<keep {
+            var row: [String?] = []
+            row.reserveCapacity(columnCount)
+            for column in typed {
+                row.append(column[DBInt(rowIndex)])
+            }
+            rows.append(row)
+        }
+
+        return SQLResult(
+            columns: columns,
+            rows: rows,
+            rowCount: keep,
+            elapsed: Foundation.Date().timeIntervalSince(started),
+            truncated: total > maxRows
+        )
     }
 
     public func block(offset: Int, size: Int) throws -> TableBlock {

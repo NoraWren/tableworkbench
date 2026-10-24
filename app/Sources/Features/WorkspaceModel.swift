@@ -32,6 +32,8 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var error: ImportError?
     @Published public private(set) var isLoading = false
     @Published public private(set) var isQuerying = false
+    @Published public private(set) var sqlResult: SQLResult?
+    @Published public private(set) var isRunningSQL = false
 
     public init() {}
 
@@ -129,6 +131,39 @@ public final class WorkspaceModel: ObservableObject {
             }
             isQuerying = false
         }
+    }
+
+    public func runSQL(entryID: UUID, sql: String) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let trimmed = sql.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let session = entries[index].session
+        isRunningSQL = true
+        sqlResult = nil
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (SQLResult?, ImportError?) in
+                do {
+                    return (try session.runSQL(trimmed), nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "执行 SQL"))
+                }
+            }.value
+
+            if let result = outcome.0 {
+                sqlResult = result
+            } else {
+                error = outcome.1
+            }
+            isRunningSQL = false
+        }
+    }
+
+    public func clearSQLResult() {
+        sqlResult = nil
     }
 
     public func closeSelected() {

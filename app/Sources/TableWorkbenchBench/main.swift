@@ -35,6 +35,7 @@ var sortAscending = true
 var filterColumn: String?
 var filterValue: String?
 var repeatCount = 1
+var sqlStatement: String?
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -48,6 +49,13 @@ while argumentIndex < arguments.count {
     case "--desc":
         sortAscending = false
         argumentIndex += 1
+    case "--sql":
+        if argumentIndex + 1 < arguments.count {
+            sqlStatement = arguments[argumentIndex + 1]
+            argumentIndex += 2
+        } else {
+            argumentIndex += 1
+        }
     case "--repeat":
         if argumentIndex + 1 < arguments.count {
             repeatCount = max(1, Int(arguments[argumentIndex + 1]) ?? 1)
@@ -77,6 +85,12 @@ do {
     let firstBlock = try opened.session.block(offset: 0, size: 1)
     let firstRow = firstBlock.rows.first ?? []
     let firstCell: String? = firstRow.first ?? nil
+
+    if let sqlStatement {
+        let result = try opened.session.runSQL(sqlStatement)
+        print("SQL: \(result.rowCount) 行, \(String(format: "%.3f", result.elapsed)) 秒, 截断: \(result.truncated)")
+        exit(0)
+    }
 
     var querySeconds: Double?
     if sortColumn != nil || filterColumn != nil {

@@ -20,6 +20,16 @@ public final class FakeSession: QuerySession, @unchecked Sendable {
         self.resultCount = rowCount
     }
 
+    public func runSQL(_ sql: String) throws -> SQLResult {
+        SQLResult(
+            columns: [ColumnInfo(name: "answer", displayName: "answer", typeName: "BIGINT", kind: .integer)],
+            rows: [["42"]],
+            rowCount: 1,
+            elapsed: 0,
+            truncated: false
+        )
+    }
+
     public func apply(view: QueryView) throws {
         generation += 1
         resultCount = rowCount
