@@ -275,6 +275,13 @@ struct ContentView: View {
                         ProgressView()
                             .controlSize(.small)
                     }
+                    if model.isExporting {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("正在导出…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if let message = model.lastExportMessage {
                         Text(message)
                             .font(.caption)

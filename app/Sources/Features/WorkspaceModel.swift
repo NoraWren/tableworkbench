@@ -50,6 +50,7 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var columnStats: ColumnStats?
     @Published public private(set) var statsColumn: String?
     @Published public private(set) var isLoadingStats = false
+    @Published public private(set) var isExporting = false
     @Published public private(set) var lastExportMessage: String?
     /// 宽表里用户手动启用的列，按文件记。默认只显示前 200 列。
     @Published private var enabledColumns: [UUID: Set<String>] = [:]
@@ -298,6 +299,8 @@ public final class WorkspaceModel: ObservableObject {
     public func export(entryID: UUID, to url: URL, format: ExportFormat) {
         guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         let session = entries[index].session
+        isExporting = true
+        lastExportMessage = nil
 
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> (Int?, ImportError?) in
@@ -315,6 +318,7 @@ public final class WorkspaceModel: ObservableObject {
             } else {
                 error = outcome.1
             }
+            isExporting = false
         }
     }
 
