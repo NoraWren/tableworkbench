@@ -40,7 +40,15 @@ public final class WorkspaceModel: ObservableObject {
     }
 
     @Published public private(set) var entries: [Entry] = []
-    @Published public var selection: UUID?
+    @Published public var selection: UUID? {
+        didSet {
+            guard oldValue != selection else { return }
+            // 换文件时清掉上一份的列统计，别让检查器张冠李戴。
+            statsColumn = nil
+            columnStats = nil
+            isLoadingStats = false
+        }
+    }
     @Published public private(set) var error: ImportError?
     @Published public private(set) var isLoading = false
     @Published public private(set) var isQuerying = false
@@ -255,6 +263,7 @@ public final class WorkspaceModel: ObservableObject {
     public func addComputedColumn(entryID: UUID, name: String, expression: String) {
         guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
         let session = entries[index].session
+        let targetID = entryID
 
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> ImportError? in
@@ -271,7 +280,9 @@ public final class WorkspaceModel: ObservableObject {
             if let outcome {
                 error = outcome
             } else {
-                entries[index].queryVersion += 1
+                if let current = entries.firstIndex(where: { $0.id == targetID }) {
+                    entries[current].queryVersion += 1
+                }
             }
         }
     }
@@ -294,7 +305,7 @@ public final class WorkspaceModel: ObservableObject {
                 }
             }.value
 
-            if statsColumn == column {
+            if statsColumn == column, selection == entryID {
                 if let stats = outcome.0 {
                     columnStats = stats
                 } else {

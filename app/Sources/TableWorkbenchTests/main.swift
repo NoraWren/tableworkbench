@@ -28,6 +28,15 @@ func residentMB() -> Double {
     return result == KERN_SUCCESS ? Double(info.resident_size) / 1024 / 1024 : -1
 }
 
+/// 等主线程上的异步任务跑完；测试进程本身就在主线程，所以可以直接跑 RunLoop。
+func waitFor(timeout: TimeInterval = 10, _ condition: @escaping @MainActor () -> Bool) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if MainActor.assumeIsolated({ condition() }) { return }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+}
+
 func expectThrows(_ name: String, _ body: () throws -> Void) {
     do {
         try body()
@@ -605,6 +614,28 @@ func run() throws {
     let memoryAfter = residentMB()
     print(String(format: "内存 20 次开关: %.1f MB -> %.1f MB", memoryBefore, memoryAfter))
     check("20 次开关内存波动小于 200MB", abs(memoryAfter - memoryBefore) < 200)
+
+    // 文件切换：新打开的文件要被选中，换文件要清掉上一份的列统计
+    let switchA = working.appendingPathComponent("switch-a.csv")
+    let switchB = working.appendingPathComponent("switch-b.csv")
+    try "name,amount\na,1\n".write(to: switchA, atomically: true, encoding: .utf8)
+    try "name,amount\nb,2\n".write(to: switchB, atomically: true, encoding: .utf8)
+    let model = MainActor.assumeIsolated { WorkspaceModel() }
+    MainActor.assumeIsolated { model.open(urls: [switchA]) }
+    waitFor { model.entries.count == 1 }
+    let firstID = MainActor.assumeIsolated { model.entries.first?.id }
+    check("第一个文件自动选中", MainActor.assumeIsolated { model.selection == firstID })
+    MainActor.assumeIsolated { model.open(urls: [switchB]) }
+    waitFor { model.entries.count == 2 }
+    let secondID = MainActor.assumeIsolated { model.entries.last?.id }
+    check("打开新文件后切到新文件", MainActor.assumeIsolated { model.selection == secondID })
+    MainActor.assumeIsolated { model.loadStats(entryID: firstID!, column: "amount") }
+    waitFor { MainActor.assumeIsolated { model.statsColumn == "amount" } }
+    MainActor.assumeIsolated { model.selection = firstID }
+    check("换文件清空列统计", MainActor.assumeIsolated { model.statsColumn == nil && model.columnStats == nil })
+    MainActor.assumeIsolated {
+        for entry in model.entries { entry.session.close() }
+    }
 }
 
 do {
