@@ -145,6 +145,17 @@ func run() throws {
     }
     check("伪装成 CSV 的二进制被拒绝", rejected)
 
+    // 不支持的扩展名给出可读错误
+    let legacyExcel = working.appendingPathComponent("old.xls")
+    try "a,b\n1,2\n".write(to: legacyExcel, atomically: true, encoding: .utf8)
+    var unsupportedMessage: String?
+    do {
+        _ = try FileImporter.open(url: legacyExcel)
+    } catch let importError as ImportError {
+        unsupportedMessage = importError.userMessage
+    }
+    check("xls 提示不支持", unsupportedMessage == "不支持这个文件格式")
+
     // 排序与筛选
     let queryCSV = working.appendingPathComponent("query.csv")
     let queryText = "name,amount,city\na,100,上海\nb,50,北京\nc,200,上海\nd,30,广州\ne,300,上海\nO'Brien,400,上海\n"
@@ -311,6 +322,12 @@ func run() throws {
     _ = try query.session.export(to: parquetURL, format: .parquet)
     let exportedParquet = try DuckDBSession.openParquet(url: parquetURL)
     check("Parquet 导出行数 6", exportedParquet.rowCount == 6)
+
+    let importedParquet = try FileImporter.open(url: parquetURL)
+    check("Parquet 可再次打开", importedParquet.session.rowCount == 6)
+    check("Parquet 编码标记", importedParquet.encoding == .parquet)
+    check("Parquet 首行有值", try importedParquet.session.block(offset: 0, size: 1).rows.first?.first != nil)
+    importedParquet.session.close()
 
     try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
         FilterCondition(column: "city", op: .equal, value: "上海")

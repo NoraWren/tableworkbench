@@ -360,7 +360,7 @@ struct ContentView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = ["csv", "tsv", "tab", "xlsx"].compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = ["csv", "tsv", "tab", "xlsx", "parquet"].compactMap { UTType(filenameExtension: $0) }
         if panel.runModal() == .OK {
             handleOpen(urls: panel.urls)
         }
@@ -436,7 +436,7 @@ private struct EmptyStateView: View {
                 .foregroundStyle(.secondary)
             Text("把一个 CSV 或 TSV 拖进来")
                 .font(.title3)
-            Text("支持逗号、制表符分隔，UTF-8 与 GBK 编码")
+            Text("支持 CSV、TSV、Parquet 和 Excel（xlsx）")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Text("数据不出本机")

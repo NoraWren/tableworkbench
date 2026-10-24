@@ -7,6 +7,8 @@ public enum TextEncoding: String, Sendable {
     case gb18030 = "GB18030"
     case utf16LE = "UTF-16LE"
     case utf16BE = "UTF-16BE"
+    /// Parquet 是二进制列式格式，没有文本编码；用它表示"直接读，不转码"。
+    case parquet = "Parquet"
 
     public var displayName: String { rawValue }
 
@@ -61,6 +63,12 @@ public enum TextFileTranscoder {
         }
 
         switch encoding {
+        case .parquet:
+            throw ImportError(
+                userMessage: "Parquet 不需要转码",
+                technicalDetail: "Parquet 走列式读取，不经过文本转码",
+                recoverySuggestion: "直接打开 Parquet 文件。"
+            )
         case .utf8:
             try fileManager.copyItem(at: source, to: destination)
         case .utf8BOM:

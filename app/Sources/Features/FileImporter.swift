@@ -27,7 +27,7 @@ public struct OpenedFile: Sendable {
 }
 
 public enum FileImporter {
-    public static let supportedExtensions: Set<String> = ["csv", "tsv", "tab", "xlsx"]
+    public static let supportedExtensions: Set<String> = ["csv", "tsv", "tab", "xlsx", "parquet"]
 
     public static func open(url: URL, sheetName: String? = nil) throws -> OpenedFile {
         let ext = url.pathExtension.lowercased()
@@ -35,7 +35,7 @@ public enum FileImporter {
             throw ImportError(
                 userMessage: "不支持这个文件格式",
                 technicalDetail: "扩展名：\(ext.isEmpty ? "无" : ext)",
-                recoverySuggestion: "目前支持 CSV、TSV 和 TAB，其他格式后续版本再说。"
+                recoverySuggestion: "目前支持 CSV、TSV、TAB、Parquet 和 xlsx。"
             )
         }
 
@@ -51,6 +51,11 @@ public enum FileImporter {
             )
         }
 
+        if ext == "parquet" {
+            let session = try DuckDBSession.openParquet(url: url)
+            return OpenedFile(url: url, session: session, encoding: .parquet)
+        }
+
         let sample = try EncodingDetector.readSample(of: url)
         let encoding = EncodingDetector.detect(sample: sample)
 
@@ -64,6 +69,12 @@ public enum FileImporter {
 
         let sampleText: String
         switch encoding {
+        case .parquet:
+            return OpenedFile(
+                url: url,
+                session: try DuckDBSession.openParquet(url: url),
+                encoding: .parquet
+            )
         case .utf8:
             sampleText = String(decoding: sample, as: UTF8.self)
         case .utf8BOM:
