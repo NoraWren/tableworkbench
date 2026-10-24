@@ -25,6 +25,7 @@ private final class PopoverState: ObservableObject {
 
 struct ContentView: View {
     @ObservedObject var model: WorkspaceModel
+    @AppStorage("sidebarShown") private var sidebarShown = true
     @AppStorage("inspectorShown") private var inspectorShown = true
     @AppStorage("sqlShown") private var sqlShown = false
     @StateObject private var popover = PopoverState()
@@ -34,7 +35,7 @@ struct ContentView: View {
     @StateObject private var snippets = SQLSnippetStore()
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: columnVisibility) {
             SidebarView(
                 model: model,
                 snippets: snippets.entries,
@@ -210,6 +211,39 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.18), value: model.error != nil)
         .animation(.easeInOut(duration: 0.18), value: model.isLoading)
+        .onAppear { configureCommands() }
+        .onChange(of: model.selection) { _, _ in configureCommands() }
+        .onChange(of: model.isRunningSQL) { _, _ in configureCommands() }
+        .onReceive(model.$entries) { _ in configureCommands() }
+    }
+
+    private func configureCommands() {
+        let bus = CommandBus.shared
+        bus.hasFile = model.selectedEntry != nil
+        bus.canExport = bus.hasFile
+        bus.canRunSQL = bus.hasFile && !model.isRunningSQL
+        bus.hasSQLText = !sql.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        bus.open = { openPanel() }
+        bus.export = {
+            if let entry = model.selectedEntry { exportPanel(entry: entry) }
+        }
+        bus.closeFile = { model.closeSelected() }
+        bus.runSQL = {
+            if let entry = model.selectedEntry {
+                model.runSQL(entryID: entry.id, sql: sql.text)
+            }
+        }
+        bus.newQuery = {
+            sql.text = "SELECT * FROM data LIMIT 100"
+            sqlShown = true
+        }
+    }
+
+    private var columnVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { sidebarShown ? .all : .detailOnly },
+            set: { sidebarShown = $0 != .detailOnly }
+        )
     }
 
     @ViewBuilder

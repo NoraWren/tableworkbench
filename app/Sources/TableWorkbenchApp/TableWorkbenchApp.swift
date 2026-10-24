@@ -51,7 +51,9 @@ struct TableWorkbenchApp: App {
         }
         .windowToolbarStyle(.unified)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            FileCommands()
+            QueryCommands()
+            ViewCommands()
         }
 
         Settings {
