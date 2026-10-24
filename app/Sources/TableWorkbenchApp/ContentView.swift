@@ -174,7 +174,7 @@ struct ContentView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = ["csv", "tsv", "tab"].compactMap { UTType(filenameExtension: $0) }
+        panel.allowedContentTypes = ["csv", "tsv", "tab", "xlsx"].compactMap { UTType(filenameExtension: $0) }
         if panel.runModal() == .OK {
             model.open(urls: panel.urls)
         }

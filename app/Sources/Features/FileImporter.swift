@@ -6,17 +6,25 @@ public struct OpenedFile: Sendable {
     public let session: QuerySession
     public let encoding: TextEncoding
     public let usedCache: Bool
+    public let cacheVariant: String
 
-    public init(url: URL, session: QuerySession, encoding: TextEncoding, usedCache: Bool = false) {
+    public init(
+        url: URL,
+        session: QuerySession,
+        encoding: TextEncoding,
+        usedCache: Bool = false,
+        cacheVariant: String = ""
+    ) {
         self.url = url
         self.session = session
         self.encoding = encoding
         self.usedCache = usedCache
+        self.cacheVariant = cacheVariant
     }
 }
 
 public enum FileImporter {
-    public static let supportedExtensions: Set<String> = ["csv", "tsv", "tab"]
+    public static let supportedExtensions: Set<String> = ["csv", "tsv", "tab", "xlsx"]
 
     public static func open(url: URL) throws -> OpenedFile {
         let ext = url.pathExtension.lowercased()
@@ -26,6 +34,10 @@ public enum FileImporter {
                 technicalDetail: "扩展名：\(ext.isEmpty ? "无" : ext)",
                 recoverySuggestion: "目前支持 CSV、TSV 和 TAB，其他格式后续版本再说。"
             )
+        }
+
+        if ext == "xlsx" {
+            return try openXLSX(url: url)
         }
 
         guard FileManager.default.isReadableFile(atPath: url.path) else {
@@ -74,7 +86,7 @@ public enum FileImporter {
 
         if let cached = ParquetCache.shared.cachedURL(for: url, variant: variant) {
             let session = try DuckDBSession.openParquet(url: cached)
-            return OpenedFile(url: url, session: session, encoding: encoding, usedCache: true)
+            return OpenedFile(url: url, session: session, encoding: encoding, usedCache: true, cacheVariant: variant)
         }
 
         let readableURL = try TextFileTranscoder.transcodeIfNeeded(source: url, encoding: encoding)
@@ -85,7 +97,34 @@ public enum FileImporter {
             format: format,
             variant: variant
         )
-        return OpenedFile(url: url, session: session, encoding: encoding, usedCache: false)
+        return OpenedFile(url: url, session: session, encoding: encoding, usedCache: false, cacheVariant: variant)
+    }
+
+    private static func openXLSX(url: URL) throws -> OpenedFile {
+        let sheets = try XLSXConverter.sheets(at: url)
+        guard let first = sheets.first else {
+            throw ImportError(userMessage: "工作簿里没有工作表", technicalDetail: nil, recoverySuggestion: "检查文件内容。")
+        }
+
+        let variant = "xlsx:\(first.name)"
+        if let cached = ParquetCache.shared.cachedURL(for: url, variant: variant) {
+            let session = try DuckDBSession.openParquet(url: cached)
+            return OpenedFile(url: url, session: session, encoding: .utf8, usedCache: true, cacheVariant: variant)
+        }
+
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("tableworkbench-\(UUID().uuidString).csv")
+        let sheet = try XLSXConverter.convert(url: url, sheetName: first.name, destination: temporary)
+        let format = CSVFormat(delimiter: ",", hasHeader: true)
+        let session = try DuckDBSession.open(url: temporary, format: format)
+        ParquetCache.shared.scheduleConversion(
+            sourceKey: url,
+            readableURL: temporary,
+            format: format,
+            variant: "xlsx:\(sheet)",
+            cleanupAfterConversion: true
+        )
+        return OpenedFile(url: url, session: session, encoding: .utf8, usedCache: false, cacheVariant: "xlsx:\(sheet)")
     }
 
     /// NUL 字节或控制字符比例过高，基本可以判定为二进制文件。

@@ -62,6 +62,12 @@ public enum SQLBuilder {
     }
 
     public static func selectList(_ columns: [ColumnInfo]) -> String {
-        columns.map { "CAST(\(quoteIdentifier($0.name)) AS VARCHAR)" }.joined(separator: ", ")
+        columns.map { info in
+            let identifier = quoteIdentifier(info.name)
+            if info.kind == .boolean {
+                return "CASE WHEN \(identifier) THEN 'TRUE' WHEN NOT \(identifier) THEN 'FALSE' ELSE NULL END AS \(identifier)"
+            }
+            return "CAST(\(identifier) AS VARCHAR)"
+        }.joined(separator: ", ")
     }
 }

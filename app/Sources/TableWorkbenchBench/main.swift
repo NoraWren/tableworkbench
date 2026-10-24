@@ -90,7 +90,7 @@ do {
         let cacheStart = Date()
         var ready = false
         while Date().timeIntervalSince(cacheStart) < 120 {
-            if ParquetCache.shared.cachedURL(for: url, variant: opened.encoding.rawValue) != nil {
+            if ParquetCache.shared.cachedURL(for: url, variant: opened.cacheVariant) != nil {
                 ready = true
                 break
             }

@@ -34,7 +34,13 @@ public final class ParquetCache: @unchecked Sendable {
         baseDirectory.appendingPathComponent("\(key(for: source, variant: variant)).parquet")
     }
 
-    public func scheduleConversion(sourceKey: URL, readableURL: URL, format: CSVFormat, variant: String) {
+    public func scheduleConversion(
+        sourceKey: URL,
+        readableURL: URL,
+        format: CSVFormat,
+        variant: String,
+        cleanupAfterConversion: Bool = false
+    ) {
         let cacheKey = key(for: sourceKey, variant: variant)
         lock.lock()
         if inFlight.contains(cacheKey) {
@@ -46,7 +52,12 @@ public final class ParquetCache: @unchecked Sendable {
 
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
-            defer { self.finish(cacheKey) }
+            defer {
+                self.finish(cacheKey)
+                if cleanupAfterConversion {
+                    try? FileManager.default.removeItem(at: readableURL)
+                }
+            }
             try? self.convert(readableURL: readableURL, format: format, key: cacheKey)
         }
     }

@@ -270,6 +270,58 @@ func run() throws {
     evictCache.evictIfNeeded(keeping: newFile)
     check("超过上限删除最旧缓存", !FileManager.default.fileExists(atPath: oldFile.path) && FileManager.default.fileExists(atPath: newFile.path))
 
+    // Excel 导入
+    let fixture = URL(fileURLWithPath: "Tests/Fixtures/sample.xlsx")
+    let xlsx = try FileImporter.open(url: fixture)
+    check("xlsx 行数 4", xlsx.session.rowCount == 4)
+    check("xlsx 列数 4", xlsx.session.columns.count == 4)
+    check("xlsx 首行张三", try xlsx.session.block(offset: 0, size: 1).rows.first?.first == "张三")
+    check("xlsx 空金额为 NULL", try xlsx.session.block(offset: 2, size: 1).rows.first?[1] == nil)
+    check("xlsx 布尔显示", try xlsx.session.block(offset: 1, size: 1).rows.first?[3] == "FALSE")
+    check("xlsx 不导入第二张表", try xlsx.session.block(offset: 0, size: 4).rows.allSatisfy { $0.first != "华东" })
+
+    var xlsxCached: URL?
+    for _ in 0..<100 {
+        if let found = ParquetCache.shared.cachedURL(for: fixture, variant: "xlsx:数据") {
+            xlsxCached = found
+            break
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    check("xlsx 生成缓存", xlsxCached != nil)
+    let xlsxSecond = try FileImporter.open(url: fixture)
+    check("xlsx 二次命中缓存", xlsxSecond.usedCache)
+    check("xlsx 缓存行数一致", xlsxSecond.session.rowCount == 4)
+
+    check("xlsx 公式无缓存留空", try xlsx.session.block(offset: 3, size: 1).rows.first?[1] == nil)
+    check("支持 xlsx 扩展名", FileImporter.supportedExtensions.contains("xlsx"))
+
+    let cleanupSource = working.appendingPathComponent("cleanup-source.csv")
+    try "a,b\n1,2\n".write(to: cleanupSource, atomically: true, encoding: .utf8)
+    let dummyKey = working.appendingPathComponent("dummy.csv")
+    ParquetCache.shared.scheduleConversion(
+        sourceKey: dummyKey,
+        readableURL: cleanupSource,
+        format: CSVFormat(delimiter: ",", hasHeader: true),
+        variant: "cleanup-test",
+        cleanupAfterConversion: true
+    )
+    var cleaned = false
+    for _ in 0..<100 {
+        if !FileManager.default.fileExists(atPath: cleanupSource.path) {
+            cleaned = true
+            break
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    check("转换后删除临时 CSV", cleaned)
+
+    let badXLSX = working.appendingPathComponent("bad.xlsx")
+    try "not an excel file".write(to: badXLSX, atomically: true, encoding: .utf8)
+    var badXLSXRejected = false
+    do { _ = try FileImporter.open(url: badXLSX) } catch { badXLSXRejected = true }
+    check("损坏的 xlsx 被拒绝", badXLSXRejected)
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {

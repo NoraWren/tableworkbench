@@ -8,12 +8,18 @@ let package = Package(
         .executable(name: "TableWorkbench", targets: ["TableWorkbenchApp"])
     ],
     dependencies: [
-        .package(url: "https://github.com/duckdb/duckdb-swift", exact: "1.1.3")
+        .package(url: "https://github.com/duckdb/duckdb-swift", exact: "1.1.3"),
+        .package(url: "https://github.com/CoreOffice/CoreXLSX", from: "0.14.2"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.20")
     ],
     targets: [
         .target(
             name: "DuckDBKit",
-            dependencies: [.product(name: "DuckDB", package: "duckdb-swift")]
+            dependencies: [
+                .product(name: "DuckDB", package: "duckdb-swift"),
+                .product(name: "CoreXLSX", package: "CoreXLSX"),
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
+            ]
         ),
         .target(name: "DataGrid", dependencies: ["DuckDBKit"]),
         .target(name: "Features", dependencies: ["DuckDBKit"]),
