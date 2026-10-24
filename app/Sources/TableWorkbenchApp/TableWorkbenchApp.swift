@@ -26,13 +26,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ParquetCache.shared.setLimitBytes(Int64(limitGB) * 1024 * 1024 * 1024)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            guard let window = NSApp.windows.first else { return }
-            window.setFrameAutosaveName("TableWorkbench.MainWindow")
             let visible = NSScreen.screens.map { $0.visibleFrame }
-            if !visible.contains(where: { $0.intersects(window.frame) }) {
-                window.setContentSize(NSSize(width: 1100, height: 760))
-                window.center()
+            for window in NSApp.windows {
+                if !visible.contains(where: { $0.intersects(window.frame) }) {
+                    window.center()
+                }
             }
+            NSApp.windows
+                .first(where: { $0.title == "本地表格工作台" })?
+                .setFrameAutosaveName("TableWorkbench.MainWindow")
         }
     }
 }
@@ -43,10 +45,6 @@ struct TableWorkbenchApp: App {
     @StateObject private var model = AppEnvironment.shared.model
 
     var body: some Scene {
-        Settings {
-            SettingsView()
-        }
-
         Window("本地表格工作台", id: "main") {
             ContentView(model: model)
                 .frame(minWidth: 900, minHeight: 600)
@@ -54,6 +52,10 @@ struct TableWorkbenchApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             CommandGroup(replacing: .newItem) {}
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 }
