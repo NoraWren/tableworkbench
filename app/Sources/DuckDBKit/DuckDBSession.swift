@@ -626,6 +626,10 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     }
 
     public func block(offset: Int, size: Int) throws -> TableBlock {
+        try block(offset: offset, size: size, columns: displayColumns)
+    }
+
+    public func block(offset: Int, size: Int, columns requested: [ColumnInfo]) throws -> TableBlock {
         lock.lock()
         defer { lock.unlock() }
 
@@ -642,9 +646,19 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         if resultCount == 0 || safeOffset >= resultCount {
             return TableBlock(offset: safeOffset, rows: [])
         }
-        var selectParts = [SQLBuilder.selectList(columns)]
-        for computed in computedColumns {
-            selectParts.append("CAST((\(computed.expression)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier(computed.name))")
+        var selectParts: [String] = []
+        selectParts.reserveCapacity(requested.count)
+        for info in requested {
+            if info.isComputed {
+                if let computed = computedColumns.first(where: { $0.name == info.name }) {
+                    selectParts.append("CAST((\(computed.expression)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier(computed.name))")
+                }
+            } else {
+                selectParts.append(SQLBuilder.selectList([info]))
+            }
+        }
+        if selectParts.isEmpty {
+            return TableBlock(offset: safeOffset, rows: [])
         }
         let selectList = selectParts.joined(separator: ", ")
         let table = hasResultTable ? "\"__result\"" : "\"__base\""

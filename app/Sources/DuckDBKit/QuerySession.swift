@@ -23,7 +23,16 @@ public protocol QuerySession: AnyObject, Sendable {
     /// 添加一个只存在于当前会话的计算列。
     func addComputedColumn(name: String, expression: String) throws
     func block(offset: Int, size: Int) throws -> TableBlock
+    /// 只取指定列的块，顺序与传入的列一致。宽表只显示前若干列时靠它少查列。
+    func block(offset: Int, size: Int, columns: [ColumnInfo]) throws -> TableBlock
     func close()
+}
+
+public extension QuerySession {
+    /// 默认实现退回全量列，替身会话和测试用不上按列裁剪。
+    func block(offset: Int, size: Int, columns: [ColumnInfo]) throws -> TableBlock {
+        try block(offset: offset, size: size)
+    }
 }
 
 public enum QuerySessionDefaults {

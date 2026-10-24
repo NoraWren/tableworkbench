@@ -257,12 +257,13 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
+                let shownColumns = DataGridView.visibleColumns(from: entry.displayColumns)
                 DataGridView(
                     columns: entry.displayColumns,
                     rowCount: entry.resultCount,
                     sorts: entry.sort,
                     provider: { offset, size in
-                        try entry.session.block(offset: offset, size: size)
+                        try entry.session.block(offset: offset, size: size, columns: shownColumns)
                     },
                     onSortClick: { column, additive in
                         model.toggleSort(entryID: entry.id, column: column, additive: additive)

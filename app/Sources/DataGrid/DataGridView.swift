@@ -201,8 +201,13 @@ public struct DataGridView: NSViewRepresentable {
     }
 
     private var visibleColumns: [ColumnInfo] {
-        if columns.count > Self.maxVisibleColumns {
-            return Array(columns.prefix(Self.defaultVisibleColumns))
+        Self.visibleColumns(from: columns)
+    }
+
+    /// 超过上限时只留前 200 列。取数据也按这份裁剪后的列表查，宽表才不会整表卡住。
+    public static func visibleColumns(from columns: [ColumnInfo]) -> [ColumnInfo] {
+        if columns.count > maxVisibleColumns {
+            return Array(columns.prefix(defaultVisibleColumns))
         }
         return columns
     }

@@ -118,6 +118,11 @@ func run() throws {
         let openedWide = try FileImporter.open(url: wide)
         check("3000 列文件可打开", openedWide.session.columns.count == 3000)
         check("3000 列文件行数 200", openedWide.session.rowCount == 200)
+        let shown = Array(openedWide.session.displayColumns.prefix(3))
+        let wideBlock = try openedWide.session.block(offset: 0, size: 2, columns: shown)
+        check("宽表只取显示列", wideBlock.rows.first?.count == 3)
+        check("宽表显示列有值", wideBlock.rows.first?.first == "v0_0")
+        openedWide.session.close()
     } else {
         print("SKIP  3000 列文件不存在，先跑 make-bench-data")
     }
