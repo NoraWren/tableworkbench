@@ -8,7 +8,7 @@ sign_identity=""
 if printenv SIGN_IDENTITY >/dev/null 2>&1; then sign_identity="$(printenv SIGN_IDENTITY)"; fi
 bundle="$root/build/TableWorkbench.app"
 
-"$root/scripts/make-app-bundle.sh" >/dev/null
+BUILD_CONFIG=release "$root/scripts/make-app-bundle.sh" >/dev/null
 
 if [ -n "$sign_identity" ]; then
   codesign --force --deep --options runtime --timestamp --sign "$sign_identity" "$bundle"

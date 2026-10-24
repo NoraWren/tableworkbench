@@ -24,17 +24,17 @@
 | macOS 14 之后未打包的进程无法可靠激活，open -a 的多文件事件也收不到 | 实测，改用开发用 .app bundle |
 | SwiftUI WindowGroup 在 open 事件下会开多个窗口，Window 场景只保留一个 | 实测 |
 | 开发期 Bundle ID 暂用 info.ideatech.tableworkbench | Info.plist，正式名待 R-DEC-06 |
+| duckdb-swift 锁定 exact 1.1.3，SPM 解析通过 | app/Package.swift |
+| CSV、TSV、Parquet、xlsx 四条导入链路都能打开；xlsx 6.2 MB、19.9 万行首次 7.23 秒、二次 0.04 秒 | 测试程序与 bench |
+| GB18030 先转成 UTF-8 再交给 DuckDB，中文列名与内容不乱码 | gbk-sample.csv 实测 |
+| 500 MB CSV 打开 0.79–1.33 秒；1 GB CSV 首次 4.78 秒、命中缓存二次 1.76–2.19 秒 | scripts/bench.sh 与 1gb.csv |
+| 分发包改用 release 构建：dmg 15 MB，解压后的 app bundle 53 MB（debug 构建分别是 27 MB 和 109 MB） | make-dmg.sh、du |
 
 ## 待验证事实（不许当成结论写进代码）
 
 | 待验证项 | 验证方式 | 影响 |
 |---|---|---|
-| duckdb-swift 的具体 API 形态（连接、查询、结果集取列） | 写一个最小可执行程序跑通，把真实代码片段记进本文件 | 决定 DuckDBKit 的封装形状 |
-| duckdb-swift 该锁哪个版本 | 用 v1.1.3 和一个 main 上的 commit 各跑一遍打开 Parquet 与读 CSV，比较是否报错 | 决定 Package.swift 写 `upToNextMajor` 还是 `revision:` |
-| DuckDB excel 扩展能否读 xlsx，多工作表怎么命名 | 实测 | 决定 R-IMP-06 走 A 还是 B/C |
-| GB18030 在 DuckDB 读 CSV 时的可移植写法 | 实测 | 决定编码探测是在 DuckDB 里做还是先转码 |
 | NSTableView 在 1000 万行下的真实帧率 | 实测 | 决定是否需要进一步降级渲染 |
-| 静态链接 DuckDB 后的包体积 | 实测 | 决定 R-PERF-04 的目标能否写成 15 MB |
 
 ## R-DEC-01 用 SwiftUI 原生，不用 Tauri 或 Electron
 
