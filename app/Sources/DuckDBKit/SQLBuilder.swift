@@ -57,6 +57,10 @@ public enum SQLBuilder {
         }
     }
 
+    public static func columnList(_ columns: [ColumnInfo]) -> String {
+        columns.map { quoteIdentifier($0.name) }.joined(separator: ", ")
+    }
+
     public static func selectList(_ columns: [ColumnInfo]) -> String {
         columns.map { "CAST(\(quoteIdentifier($0.name)) AS VARCHAR)" }.joined(separator: ", ")
     }

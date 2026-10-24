@@ -8,16 +8,17 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public private(set) var resultCount: Int
     public private(set) var generation: Int = 0
     private var view: QueryView = .empty
-
-    private let viewName = "data"
+    private var hasResultTable = false
     private var database: Database?
     private var connection: Connection?
+    private let temporaryDirectory: URL
     private let lock = NSLock()
     private var closed = false
 
-    private init(database: Database, connection: Connection, columns: [ColumnInfo], rowCount: Int) {
+    private init(database: Database, connection: Connection, temporaryDirectory: URL, columns: [ColumnInfo], rowCount: Int) {
         self.database = database
         self.connection = connection
+        self.temporaryDirectory = temporaryDirectory
         self.columns = columns
         self.rowCount = rowCount
         self.resultCount = rowCount
@@ -29,50 +30,60 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
     public static func open(url: URL, format: CSVFormat) throws -> DuckDBSession {
         do {
+            let fileManager = FileManager.default
+            let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent("tableworkbench-\(UUID().uuidString)", isDirectory: true)
+            try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
             let database = try Database(store: .inMemory)
             let connection = try database.connect()
+            try connection.execute("SET memory_limit='1200MB'")
+            try connection.execute("SET temp_directory='\(temporaryDirectory.path.replacingOccurrences(of: "'", with: "''"))'")
 
             let path = url.path.replacingOccurrences(of: "'", with: "''")
             let delimiter = format.delimiter == "\t" ? "\t" : String(format.delimiter)
             let delimiterLiteral = delimiter.replacingOccurrences(of: "'", with: "''")
             let header = format.hasHeader ? "true" : "false"
 
-            let createView = """
-            CREATE VIEW "data" AS
+            let createTable = """
+            CREATE TABLE "__base" AS
             SELECT * FROM read_csv_auto('\(path)', delim='\(delimiterLiteral)', header=\(header), auto_detect=true)
             """
-            try connection.execute(createView)
+            try connection.execute(createTable)
 
-            let described = try connection.query("DESCRIBE SELECT * FROM \"data\"")
+            let described = try connection.query("DESCRIBE SELECT * FROM \"__base\"")
             let nameColumn = described.column(at: 0).cast(to: String.self)
             let typeColumn = described.column(at: 1).cast(to: String.self)
             let describeCount = Int(described.rowCount)
 
-            let rawNames: [String] = (0..<describeCount).map { index in
-                nameColumn[DBInt(index)] ?? "column_\(index + 1)"
+            var rawNames: [String] = []
+            var typeNames: [String] = []
+            for index in 0..<describeCount {
+                let raw = nameColumn[DBInt(index)] ?? "column_\(index + 1)"
+                if raw == "__rid" { continue }
+                rawNames.append(raw)
+                typeNames.append(typeColumn[DBInt(index)] ?? "VARCHAR")
             }
             let displayNames = CSVSniffer.sanitizeColumnNames(rawNames)
 
             var columns: [ColumnInfo] = []
-            columns.reserveCapacity(describeCount)
-            for index in 0..<describeCount {
-                let typeName = typeColumn[DBInt(index)] ?? "VARCHAR"
+            columns.reserveCapacity(rawNames.count)
+            for index in 0..<rawNames.count {
                 columns.append(
                     ColumnInfo(
                         name: rawNames[index],
                         displayName: displayNames[index],
-                        typeName: typeName,
-                        kind: ColumnKind.infer(fromTypeName: typeName)
+                        typeName: typeNames[index],
+                        kind: ColumnKind.infer(fromTypeName: typeNames[index])
                     )
                 )
             }
 
-            let counted = try connection.query("SELECT count(*) FROM \"data\"")
+            let counted = try connection.query("SELECT count(*) FROM \"__base\"")
             let total = counted.column(at: 0).cast(to: Int64.self)[0] ?? 0
 
             return DuckDBSession(
                 database: database,
                 connection: connection,
+                temporaryDirectory: temporaryDirectory,
                 columns: columns,
                 rowCount: Int(total)
             )
@@ -102,11 +113,28 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         }
 
         let whereSQL = SQLBuilder.whereClause(view.filter)
+        let orderSQL = SQLBuilder.orderBy(view.sort)
+
         do {
-            if whereSQL.isEmpty {
+            try connection.execute("DROP TABLE IF EXISTS \"__result\"")
+            hasResultTable = false
+
+            if whereSQL.isEmpty && orderSQL.isEmpty {
                 resultCount = rowCount
             } else {
-                let counted = try connection.query("SELECT count(*) FROM \"data\" \(whereSQL)")
+                let columnsSQL = SQLBuilder.columnList(columns)
+                let inner = [
+                    "SELECT \(columnsSQL) FROM \"__base\"",
+                    whereSQL,
+                    orderSQL
+                ].filter { !$0.isEmpty }.joined(separator: " ")
+                let createResult = """
+                CREATE TEMP TABLE "__result" AS
+                SELECT \(columnsSQL) FROM (\(inner)) AS t
+                """
+                try connection.execute(createResult)
+                hasResultTable = true
+                let counted = try connection.query("SELECT count(*) FROM \"__result\"")
                 resultCount = Int(counted.column(at: 0).cast(to: Int64.self)[0] ?? 0)
             }
             self.view = view
@@ -134,14 +162,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             return TableBlock(offset: safeOffset, rows: [])
         }
         let selectList = SQLBuilder.selectList(columns)
-        let whereSQL = SQLBuilder.whereClause(view.filter)
-        let orderSQL = SQLBuilder.orderBy(view.sort)
-        let sql = [
-            "SELECT \(selectList) FROM \"data\"",
-            whereSQL,
-            orderSQL,
-            "LIMIT \(safeSize) OFFSET \(safeOffset)"
-        ].filter { !$0.isEmpty }.joined(separator: " ")
+        let table = hasResultTable ? "\"__result\"" : "\"__base\""
+        let upperBound = safeOffset + safeSize
+        let sql = "SELECT \(selectList) FROM \(table) WHERE rowid >= \(safeOffset) AND rowid < \(upperBound) ORDER BY rowid"
 
         do {
             let result = try connection.query(sql)
@@ -175,6 +198,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         closed = true
         connection = nil
         database = nil
+        try? FileManager.default.removeItem(at: temporaryDirectory)
     }
 
     private static func quoteIdentifier(_ name: String) -> String {

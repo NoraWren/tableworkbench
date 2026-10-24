@@ -9,6 +9,7 @@ struct BenchResult: Encodable {
     let columns: Int
     let rows: Int
     let resultRows: Int
+    let firstCell: String?
     let openSeconds: Double
     let querySeconds: Double?
     let blocks: [BlockTiming]
@@ -33,6 +34,7 @@ var sortColumn: String?
 var sortAscending = true
 var filterColumn: String?
 var filterValue: String?
+var repeatCount = 1
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -46,6 +48,13 @@ while argumentIndex < arguments.count {
     case "--desc":
         sortAscending = false
         argumentIndex += 1
+    case "--repeat":
+        if argumentIndex + 1 < arguments.count {
+            repeatCount = max(1, Int(arguments[argumentIndex + 1]) ?? 1)
+            argumentIndex += 2
+        } else {
+            argumentIndex += 1
+        }
     case "--filter":
         if argumentIndex + 1 < arguments.count, let separator = arguments[argumentIndex + 1].firstIndex(of: "=") {
             let pair = arguments[argumentIndex + 1]
@@ -65,6 +74,9 @@ do {
     let start = Date()
     let opened = try FileImporter.open(url: url)
     let openSeconds = Date().timeIntervalSince(start)
+    let firstBlock = try opened.session.block(offset: 0, size: 1)
+    let firstRow = firstBlock.rows.first ?? []
+    let firstCell: String? = firstRow.first ?? nil
 
     var querySeconds: Double?
     if sortColumn != nil || filterColumn != nil {
@@ -73,7 +85,9 @@ do {
             FilterGroup(join: .and, conditions: [FilterCondition(column: $0, op: .equal, value: filterValue ?? "")])
         }
         let queryStart = Date()
-        try opened.session.apply(view: QueryView(sort: sort, filter: filter))
+        for _ in 0..<repeatCount {
+            try opened.session.apply(view: QueryView(sort: sort, filter: filter))
+        }
         querySeconds = Date().timeIntervalSince(queryStart)
     }
 
@@ -93,6 +107,7 @@ do {
         columns: opened.session.columns.count,
         rows: opened.session.rowCount,
         resultRows: opened.session.resultCount,
+        firstCell: firstCell,
         openSeconds: openSeconds,
         querySeconds: querySeconds,
         blocks: timings
@@ -105,6 +120,7 @@ do {
     } else {
         print("文件: \(result.file) (\(bytes / 1024 / 1024) MB)")
         print("编码: \(result.encoding)  列: \(result.columns)  行: \(result.rows)  结果: \(result.resultRows)")
+        print("首行: \(result.firstCell ?? "nil")")
         print(String(format: "打开: %.3f 秒", result.openSeconds))
         if let querySeconds = result.querySeconds {
             print(String(format: "查询准备: %.3f 秒", querySeconds))
