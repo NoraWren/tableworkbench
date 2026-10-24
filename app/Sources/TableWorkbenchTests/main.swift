@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import CryptoKit
 import Darwin
 import DuckDBKit
@@ -404,6 +405,46 @@ func run() throws {
     var badXLSXRejected = false
     do { _ = try FileImporter.open(url: badXLSX) } catch { badXLSXRejected = true }
     check("损坏的 xlsx 被拒绝", badXLSXRejected)
+
+    // TSV 复制
+    let tsv = TSVBuilder.build(
+        rows: [["a", "b\tc", "d\"e"], [nil, "line\nbreak", ""]],
+        columns: ["A", "B", "C"],
+        includeHeader: true
+    )
+    check("TSV 表头", tsv.hasPrefix("A\tB\tC"))
+    check("TSV 制表符转义", tsv.contains("\"b\tc\""))
+    check("TSV 换行转义", tsv.contains("\"line\nbreak\""))
+    check("TSV 引号转义", tsv.contains("\"d\"\"e\""))
+    let noHeaderTSV = TSVBuilder.build(rows: [["1", "2"]], columns: ["A", "B"], includeHeader: false)
+    check("TSV 无表头", noHeaderTSV == "1\t2")
+
+    let gridSource = GridDataSource()
+    gridSource.configure(
+        columns: [
+            ColumnInfo(name: "A", displayName: "A", typeName: "VARCHAR", kind: .text),
+            ColumnInfo(name: "B", displayName: "B", typeName: "VARCHAR", kind: .text)
+        ],
+        rowCount: 2,
+        provider: { _, _ in TableBlock(offset: 0, rows: [["a", "b"], ["c", "d"]]) }
+    )
+
+    let gridTable = GridTableView()
+    gridTable.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+    gridTable.dataSource = gridSource
+    gridTable.delegate = gridSource
+    gridTable.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("A")))
+    gridTable.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("B")))
+    gridTable.reloadData()
+    gridTable.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+
+    UserDefaults.standard.set(true, forKey: "copyIncludesHeader")
+    gridTable.copy(nil)
+    check("Command+C 写入 TSV", NSPasteboard.general.string(forType: .string) == "A\tB\na\tb")
+    UserDefaults.standard.set(false, forKey: "copyIncludesHeader")
+    gridTable.copy(nil)
+    check("复制不带表头", NSPasteboard.general.string(forType: .string) == "a\tb")
+    UserDefaults.standard.set(true, forKey: "copyIncludesHeader")
 
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()

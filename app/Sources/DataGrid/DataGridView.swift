@@ -117,7 +117,7 @@ public struct DataGridView: NSViewRepresentable {
         let rowNumbers = RowNumbersView()
         rowNumbers.translatesAutoresizingMaskIntoConstraints = false
 
-        let tableView = NSTableView()
+        let tableView = GridTableView()
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.rowSizeStyle = .medium
         tableView.allowsMultipleSelection = true

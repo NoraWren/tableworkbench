@@ -16,6 +16,16 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
     private let cache = BlockCache(capacity: 8)
     private let cellIdentifier = NSUserInterfaceItemIdentifier("data-cell")
 
+    public func configure(
+        columns: [ColumnInfo],
+        rowCount: Int,
+        provider: @escaping (Int, Int) throws -> TableBlock
+    ) {
+        self.columns = columns
+        self.rowCount = rowCount
+        self.provider = provider
+    }
+
     public func numberOfRows(in tableView: NSTableView) -> Int {
         rowCount
     }
@@ -71,7 +81,25 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
         return cell
     }
 
-    private func cellValue(row: Int, columnIndex: Int) -> String? {
+    public func tsv(for rows: IndexSet, includeHeader: Bool) -> String {
+        var selected: [[String?]] = []
+        selected.reserveCapacity(rows.count)
+        for row in rows.sorted() {
+            var values: [String?] = []
+            values.reserveCapacity(columns.count)
+            for index in columns.indices {
+                values.append(cellValue(row: row, columnIndex: index))
+            }
+            selected.append(values)
+        }
+        return TSVBuilder.build(
+            rows: selected,
+            columns: columns.map(\.displayName),
+            includeHeader: includeHeader
+        )
+    }
+
+    func cellValue(row: Int, columnIndex: Int) -> String? {
         guard row >= 0, row < rowCount else { return nil }
         let blockIndex = row / blockSize
         let block = cache.value(for: blockIndex) ?? loadBlock(blockIndex)
