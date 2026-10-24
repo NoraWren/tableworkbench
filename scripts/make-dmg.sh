@@ -3,13 +3,15 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 version="0.1.0"
-if [ -n "$VERSION" ]; then version="$VERSION"; fi
+if printenv VERSION >/dev/null 2>&1; then version="$(printenv VERSION)"; fi
+sign_identity=""
+if printenv SIGN_IDENTITY >/dev/null 2>&1; then sign_identity="$(printenv SIGN_IDENTITY)"; fi
 bundle="$root/build/TableWorkbench.app"
 
 "$root/scripts/make-app-bundle.sh" >/dev/null
 
-if [ -n "$SIGN_IDENTITY" ]; then
-  codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$bundle"
+if [ -n "$sign_identity" ]; then
+  codesign --force --deep --options runtime --timestamp --sign "$sign_identity" "$bundle"
 else
   echo "未设置 SIGN_IDENTITY，使用 ad-hoc 签名，Gatekeeper 会拦截。" >&2
 fi
@@ -24,8 +26,8 @@ hdiutil create \
   -format UDZO \
   "$dmg" >/dev/null
 
-if [ -n "$SIGN_IDENTITY" ]; then
-  codesign --force --sign "$SIGN_IDENTITY" "$dmg"
+if [ -n "$sign_identity" ]; then
+  codesign --force --sign "$sign_identity" "$dmg"
 fi
 
 echo "$dmg"

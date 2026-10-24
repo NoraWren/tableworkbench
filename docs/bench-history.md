@@ -118,6 +118,13 @@ SQL 执行包含一次 DESCRIBE 和一次带 CAST 的查询，聚合在 DuckDB �
 
 目标 1 秒，达标。统计走聚合 SQL 加一条直方图查询，不把数据读进 Swift。
 
+## 打包（2026-10-24）
+
+- dmg：27 MB（ad-hoc 签名，未公证）
+- 挂载后包含 TableWorkbench.app
+- Bundle ID：info.ideatech.tableworkbench（占位）
+- Gatekeeper 会拦截未公证的包，正式发布前补 Developer ID
+
 ## 记录
 
 | 日期 | 提交 | 机型 | 500MB 打开 | 峰值内存 | 第 1 块 | 第 100 块 |
