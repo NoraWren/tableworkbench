@@ -3,6 +3,8 @@ import Foundation
 /// 界面层只依赖这个协议，不直接依赖 DuckDB。
 public protocol QuerySession: AnyObject, Sendable {
     var columns: [ColumnInfo] { get }
+    /// 网格显示的列，包含计算列。
+    var displayColumns: [ColumnInfo] { get }
     /// 文件总行数，不受筛选影响。
     var rowCount: Int { get }
     /// 当前排序和筛选后的结果行数。
@@ -18,6 +20,8 @@ public protocol QuerySession: AnyObject, Sendable {
     func columnStats(column: String) throws -> ColumnStats
     /// 导出当前视图，返回导出行数。
     func export(to url: URL, format: ExportFormat) throws -> Int
+    /// 添加一个只存在于当前会话的计算列。
+    func addComputedColumn(name: String, expression: String) throws
     func block(offset: Int, size: Int) throws -> TableBlock
     func close()
 }

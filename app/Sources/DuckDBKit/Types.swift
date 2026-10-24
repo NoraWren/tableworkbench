@@ -32,12 +32,20 @@ public struct ColumnInfo: Hashable, Sendable {
     public let displayName: String
     public let typeName: String
     public let kind: ColumnKind
+    public let isComputed: Bool
 
-    public init(name: String, displayName: String, typeName: String, kind: ColumnKind) {
+    public init(
+        name: String,
+        displayName: String,
+        typeName: String,
+        kind: ColumnKind,
+        isComputed: Bool = false
+    ) {
         self.name = name
         self.displayName = displayName
         self.typeName = typeName
         self.kind = kind
+        self.isComputed = isComputed
     }
 }
 

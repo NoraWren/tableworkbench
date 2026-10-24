@@ -9,6 +9,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public private(set) var generation: Int = 0
     private var view: QueryView = .empty
     private var hasResultTable = false
+    private var computedColumns: [(name: String, expression: String)] = []
     private var database: Database?
     private var connection: Connection?
     private let temporaryDirectory: URL
@@ -162,6 +163,54 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         } catch {
             throw ImportError.wrap(error, step: "执行筛选")
         }
+    }
+
+    public var displayColumns: [ColumnInfo] {
+        var result = columns
+        for computed in computedColumns {
+            result.append(ColumnInfo(
+                name: computed.name,
+                displayName: computed.name,
+                typeName: "VARCHAR",
+                kind: .text,
+                isComputed: true
+            ))
+        }
+        return result
+    }
+
+    public func addComputedColumn(name: String, expression: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedExpression = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, !trimmedExpression.isEmpty else {
+            throw ImportError(userMessage: "列名和表达式都不能为空", technicalDetail: nil, recoverySuggestion: "填写后重试。")
+        }
+        guard !trimmedExpression.contains(";") else {
+            throw ImportError(userMessage: "表达式里不能有分号", technicalDetail: nil, recoverySuggestion: "只写一段表达式。")
+        }
+        let existing = Set(columns.map(\.name) + computedColumns.map(\.name))
+        guard !existing.contains(trimmedName) else {
+            throw ImportError(userMessage: "列名已存在", technicalDetail: trimmedName, recoverySuggestion: "换一个列名。")
+        }
+
+        let probe = "SELECT (\(trimmedExpression)) AS v FROM \"__base\" LIMIT 1"
+        try SQLGuard.validate(probe)
+        do {
+            _ = try connection.query(probe)
+        } catch {
+            throw ImportError(
+                userMessage: "表达式无效",
+                technicalDetail: String(describing: error),
+                recoverySuggestion: "检查列名和运算符号。"
+            )
+        }
+        computedColumns.append((trimmedName, trimmedExpression))
     }
 
     public func columnStats(column: String) throws -> ColumnStats {
@@ -568,7 +617,11 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         if resultCount == 0 || safeOffset >= resultCount {
             return TableBlock(offset: safeOffset, rows: [])
         }
-        let selectList = SQLBuilder.selectList(columns)
+        var selectParts = [SQLBuilder.selectList(columns)]
+        for computed in computedColumns {
+            selectParts.append("CAST((\(computed.expression)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier(computed.name))")
+        }
+        let selectList = selectParts.joined(separator: ", ")
         let table = hasResultTable ? "\"__result\"" : "\"__base\""
         let upperBound = safeOffset + safeSize
         let sql = "SELECT \(selectList) FROM \(table) WHERE rowid >= \(safeOffset) AND rowid < \(upperBound) ORDER BY rowid"

@@ -20,6 +20,12 @@ public final class FakeSession: QuerySession, @unchecked Sendable {
         self.resultCount = rowCount
     }
 
+    public var displayColumns: [ColumnInfo] { columns }
+
+    public func addComputedColumn(name: String, expression: String) throws {
+        // 预览实现忽略计算列。
+    }
+
     public func columnStats(column: String) throws -> ColumnStats {
         ColumnStats(
             column: column,

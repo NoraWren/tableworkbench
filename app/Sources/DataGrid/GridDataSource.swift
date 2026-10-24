@@ -10,6 +10,7 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
     var onError: ((Error) -> Void)?
     var onSortClick: ((String, Bool) -> Void)?
     var sorts: [SortSpec] = []
+    var computedColumnNames: Set<String> = []
     weak var contentTableView: NSTableView?
     weak var rowNumbersView: NSView?
 
@@ -31,6 +32,7 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
     }
 
     public func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
+        guard !computedColumnNames.contains(tableColumn.identifier.rawValue) else { return }
         let additive = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
         onSortClick?(tableColumn.identifier.rawValue, additive)
     }

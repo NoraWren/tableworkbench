@@ -109,6 +109,7 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.provider = provider
         dataSource.onError = onError
         dataSource.onSortClick = onSortClick
+        dataSource.computedColumnNames = Set(columns.filter(\.isComputed).map(\.name))
         return dataSource
     }
 
@@ -158,6 +159,7 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.provider = provider
         dataSource.onError = onError
         dataSource.onSortClick = onSortClick
+        dataSource.computedColumnNames = Set(columns.filter(\.isComputed).map(\.name))
 
         let changed = dataSource.columns != visibleColumns
             || dataSource.rowCount != rowCount

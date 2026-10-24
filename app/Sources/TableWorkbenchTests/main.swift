@@ -299,6 +299,28 @@ func run() throws {
     check("筛选导出 4 行", filteredExport.session.rowCount == 4)
     try query.session.apply(view: .empty)
 
+    // 计算列
+    let beforeComputed = query.session.displayColumns.count
+    try query.session.addComputedColumn(name: "tax", expression: "amount * 0.06")
+    check("计算列添加", query.session.displayColumns.count == beforeComputed + 1)
+    check("计算列标记", query.session.displayColumns.last?.isComputed == true)
+    let computedBlock = try query.session.block(offset: 0, size: 1)
+    let taxCell: String? = (computedBlock.rows.first ?? []).last ?? nil
+    check("计算列值 6", abs((Double(taxCell ?? "") ?? -1) - 6.0) < 0.0001)
+
+    var duplicateComputed = false
+    do { try query.session.addComputedColumn(name: "amount", expression: "1") } catch { duplicateComputed = true }
+    check("计算列重名拒绝", duplicateComputed)
+
+    var badComputed = false
+    do { try query.session.addComputedColumn(name: "bad", expression: "amount *") } catch { badComputed = true }
+    check("计算列表达式拒绝", badComputed)
+
+    let computedExportURL = working.appendingPathComponent("with-computed.csv")
+    _ = try query.session.export(to: computedExportURL, format: .csv)
+    let computedExport = try FileImporter.open(url: computedExportURL)
+    check("导出不含计算列", computedExport.session.columns.count == 3 && computedExport.session.rowCount == 6)
+
     // Parquet 缓存
     let cacheDirectory = working.appendingPathComponent("cache")
     let parquetCache = ParquetCache(baseDirectory: cacheDirectory, limitBytes: 100 * 1024 * 1024)

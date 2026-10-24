@@ -5,6 +5,11 @@ import Features
 import DataGrid
 import DuckDBKit
 
+private final class ComputedColumnState: ObservableObject {
+    @Published var name = ""
+    @Published var expression = ""
+}
+
 private final class SheetPromptState: ObservableObject {
     @Published var isPresented = false
     @Published var url: URL?
@@ -15,6 +20,7 @@ private final class SheetPromptState: ObservableObject {
 private final class PopoverState: ObservableObject {
     @Published var filterShown = false
     @Published var pivotShown = false
+    @Published var computedShown = false
 }
 
 struct ContentView: View {
@@ -24,6 +30,7 @@ struct ContentView: View {
     @StateObject private var popover = PopoverState()
     @StateObject private var sql = SQLState()
     @StateObject private var sheetPrompt = SheetPromptState()
+    @StateObject private var computed = ComputedColumnState()
 
     var body: some View {
         NavigationSplitView {
@@ -68,6 +75,36 @@ struct ContentView: View {
                     }
 
                     if let entry = model.selectedEntry {
+                        Button {
+                            popover.computedShown.toggle()
+                        } label: {
+                            Label("计算列", systemImage: "function")
+                        }
+                        .help("用表达式添加一列")
+                        .popover(isPresented: $popover.computedShown, arrowEdge: .bottom) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("计算列").font(.headline)
+                                TextField("列名", text: $computed.name)
+                                TextField("表达式，例如 amount * 1.06", text: $computed.expression)
+                                HStack {
+                                    Spacer()
+                                    Button("添加") {
+                                        model.addComputedColumn(
+                                            entryID: entry.id,
+                                            name: computed.name,
+                                            expression: computed.expression
+                                        )
+                                        computed.name = ""
+                                        computed.expression = ""
+                                        popover.computedShown = false
+                                    }
+                                    .disabled(computed.name.isEmpty || computed.expression.isEmpty)
+                                }
+                            }
+                            .padding(14)
+                            .frame(width: 420)
+                        }
+
                         Button {
                             exportPanel(entry: entry)
                         } label: {
@@ -205,7 +242,7 @@ struct ContentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                 DataGridView(
-                    columns: entry.columns,
+                    columns: entry.displayColumns,
                     rowCount: entry.resultCount,
                     sorts: entry.sort,
                     provider: { offset, size in

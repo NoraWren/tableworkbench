@@ -35,6 +35,7 @@ public final class WorkspaceModel: ObservableObject {
         }
         public var rowCount: Int { session.rowCount }
         public var columns: [ColumnInfo] { session.columns }
+        public var displayColumns: [ColumnInfo] { session.displayColumns }
     }
 
     @Published public private(set) var entries: [Entry] = []
@@ -215,6 +216,30 @@ public final class WorkspaceModel: ObservableObject {
                 error = outcome.1
             }
             isRunningSQL = false
+        }
+    }
+
+    public func addComputedColumn(entryID: UUID, name: String, expression: String) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let session = entries[index].session
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> ImportError? in
+                do {
+                    try session.addComputedColumn(name: name, expression: expression)
+                    return nil
+                } catch let importError as ImportError {
+                    return importError
+                } catch {
+                    return ImportError.wrap(error, step: "添加计算列")
+                }
+            }.value
+
+            if let outcome {
+                error = outcome
+            } else {
+                entries[index].queryVersion += 1
+            }
         }
     }
 
