@@ -57,7 +57,8 @@ struct ContentView: View {
                         } label: {
                             Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
                         }
-                        .help("添加筛选条件")
+                        .keyboardShortcut("f", modifiers: .command)
+                        .help("添加筛选条件（Command+F）")
                         .popover(isPresented: $popover.filterShown, arrowEdge: .bottom) {
                             FilterPanel(columns: entry.columns, initial: entry.filter) { filter in
                                 model.applyFilter(entryID: entry.id, filter: filter)
