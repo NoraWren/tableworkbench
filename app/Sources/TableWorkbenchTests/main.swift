@@ -776,6 +776,26 @@ func run() throws {
     MainActor.assumeIsolated { model.selection = secondID }
     check("换文件清空选中行", MainActor.assumeIsolated { model.selectedRows.isEmpty })
 
+    // 一键分析：真实文件走一遍挑列、聚合、出图
+    let autoModel = MainActor.assumeIsolated { WorkspaceModel() }
+    let autoFile = URL(fileURLWithPath: "../bench-data/wide-100k.csv")
+    if FileManager.default.fileExists(atPath: autoFile.path) {
+        MainActor.assumeIsolated { autoModel.open(urls: [autoFile]) }
+        waitFor { MainActor.assumeIsolated { autoModel.entries.count == 1 } }
+        let autoID = MainActor.assumeIsolated { autoModel.entries.first?.id }
+        MainActor.assumeIsolated { autoModel.runAutoAnalysis(entryID: autoID!) }
+        waitFor(timeout: 30) { MainActor.assumeIsolated { autoModel.autoCharts != nil || autoModel.error != nil } }
+        let charts = MainActor.assumeIsolated { autoModel.autoCharts }
+        check("一键分析出多张图", (charts?.count ?? 0) >= 3)
+        check("一键分析按分类词挑维度", charts?.first?.title.hasPrefix("区域") == true)
+        check("一键分析跳过订单号", charts?.contains { $0.title.hasPrefix("订单号") } == false)
+        check("一键分析每张图有数据", charts?.allSatisfy { !$0.isEmpty } == true)
+        MainActor.assumeIsolated { autoModel.clearAutoAnalysis() }
+        MainActor.assumeIsolated { for entry in autoModel.entries { entry.session.close() } }
+    } else {
+        print("SKIP  缺少 wide-100k.csv，跳过一键分析端到端")
+    }
+
     // 行详情：只取一行，宽表按显示列裁剪
     MainActor.assumeIsolated { model.selection = firstID }
     MainActor.assumeIsolated { model.loadRowDetail(entryID: firstID!, row: 0) }
