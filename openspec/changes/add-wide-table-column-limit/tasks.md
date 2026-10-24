@@ -5,6 +5,7 @@
 - [x] 1.1 QuerySession 增加 block(offset:size:columns:) 默认实现
 - [x] 1.2 DuckDBSession 按传入列拼 SELECT，计算列按表达式生成，验证列顺序
 - [x] 1.3 测试覆盖宽表只取 3 列且首值为 v0_0
+- [x] 1.4 查失败的块只报一次错，避免每个单元格重复跑坏查询
 
 ## 2. 界面
 

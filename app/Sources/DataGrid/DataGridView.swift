@@ -169,6 +169,7 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.sorts = sorts
 
         if changed, let tableView = dataSource.contentTableView {
+            dataSource.resetFailedBlocks()
             rebuildColumns(tableView)
         }
         dataSource.rowNumbersView?.needsDisplay = true

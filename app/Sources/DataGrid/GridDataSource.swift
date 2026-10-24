@@ -16,6 +16,8 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
 
     private let cache = BlockCache(capacity: 8)
     private let cellIdentifier = NSUserInterfaceItemIdentifier("data-cell")
+    /// 查失败的块记下来，别让同一块的每个单元格各跑一遍同样的坏查询。
+    private var failedBlocks: Set<Int> = []
 
     public func configure(
         columns: [ColumnInfo],
@@ -113,14 +115,23 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
         return values[columnIndex]
     }
 
+    func resetFailedBlocks() {
+        failedBlocks.removeAll()
+    }
+
     private func loadBlock(_ blockIndex: Int) -> TableBlock? {
         guard let provider else { return nil }
+        guard !failedBlocks.contains(blockIndex) else { return nil }
         do {
             let block = try provider(blockIndex * blockSize, blockSize)
             cache.insert(block, for: blockIndex)
             return block
         } catch {
-            onError?(error)
+            failedBlocks.insert(blockIndex)
+            // 视图正在布局时改 SwiftUI 状态会触发重入，放到下一轮主线程再报。
+            DispatchQueue.main.async { [weak self] in
+                self?.onError?(error)
+            }
             return nil
         }
     }
