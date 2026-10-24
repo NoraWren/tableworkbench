@@ -430,6 +430,11 @@ func run() throws {
     check("一键分析跳过订单号", autoSpecs.allSatisfy { $0.groupColumn != "order" })
     check("一键分析挑出两个维度", autoSpecs.map(\.groupColumn) == ["region", "channel"])
     check("一键分析度量选金额", autoSpecs.first?.value.column == "amount")
+    let reordered = [
+        ColumnInfo(name: "qty", displayName: "数量", typeName: "BIGINT", kind: .integer),
+        ColumnInfo(name: "amount", displayName: "金额", typeName: "DOUBLE", kind: .double)
+    ]
+    check("金额比数量优先", AutoAnalysis.measureColumn(reordered)?.name == "amount")
     let noneSpecs = AutoAnalysis.plan(columns: autoColumns) { _ in 100 }
     check("基数全超限时不出图", noneSpecs.isEmpty)
     check("没有数值列不出图", AutoAnalysis.plan(columns: [autoColumns[1]]) { _ in 3 }.isEmpty)

@@ -20,10 +20,13 @@ public enum AutoAnalysis {
     /// 度量列：名字命中金额/数量这类词优先，否则取第一个数值列。
     public static func measureColumn(_ columns: [ColumnInfo]) -> ColumnInfo? {
         let numeric = columns.filter { $0.kind.isNumeric }
-        let named = numeric.first { column in
-            measureKeywords.contains { column.displayName.contains($0) }
+        // 按关键词的优先级找，而不是按列顺序：金额比数量更该当度量。
+        for keyword in measureKeywords {
+            if let hit = numeric.first(where: { $0.displayName.contains(keyword) }) {
+                return hit
+            }
         }
-        return named ?? numeric.first
+        return numeric.first
     }
 
     /// 生成图表配置。cardinality 返回某列的取值个数，超过上限的列会被跳过。
