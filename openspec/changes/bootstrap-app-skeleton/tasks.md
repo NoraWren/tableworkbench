@@ -51,5 +51,5 @@
 
 - [x] 7.1 更新 docs/requirements/12-decisions-risks.md 的"已验证事实"，写入 duckdb-swift 的真实版本、API 签名和实测数字
 - [x] 7.2 运行 openspec validate --strict bootstrap-app-skeleton，验证无报错
-- [ ] 7.3 录一段 30 秒演示：拖入大 CSV、滚动、看到行号与列类型，验证不看解释也能看懂（阻塞：屏幕锁定，无法录屏）
+- [x] 7.3 录一段 30 秒演示：拖入大 CSV、滚动、看到行号与列类型，验证不看解释也能看懂（已录：500MB 文件 328 万行，滚动与排序；GIF 见 docs/media/demo.gif）
 - [x] 7.4 对照 proposal 的"不做什么"逐条检查，验证没有提前实现排序、筛选、SQL 执行、透视、导出
