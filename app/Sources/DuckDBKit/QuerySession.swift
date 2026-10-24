@@ -14,6 +14,10 @@ public protocol QuerySession: AnyObject, Sendable {
     func runSQL(_ sql: String) throws -> SQLResult
     /// 按透视配置生成交叉表。
     func pivot(spec: PivotSpec) throws -> SQLResult
+    /// 统计一列。源表跟随当前筛选。
+    func columnStats(column: String) throws -> ColumnStats
+    /// 导出当前视图，返回导出行数。
+    func export(to url: URL, format: ExportFormat) throws -> Int
     func block(offset: Int, size: Int) throws -> TableBlock
     func close()
 }

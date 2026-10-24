@@ -60,6 +60,13 @@ struct ContentView: View {
 
                     if let entry = model.selectedEntry {
                         Button {
+                            exportPanel(entry: entry)
+                        } label: {
+                            Label("导出", systemImage: "square.and.arrow.up")
+                        }
+                        .help("导出当前视图")
+
+                        Button {
                             popover.pivotShown.toggle()
                         } label: {
                             Label("透视", systemImage: "square.grid.3x3")
@@ -92,7 +99,7 @@ struct ContentView: View {
             }
         }
         .inspector(isPresented: $inspectorShown) {
-            InspectorView(entry: model.selectedEntry)
+            InspectorView(model: model)
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 360)
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -148,6 +155,11 @@ struct ContentView: View {
                         ProgressView()
                             .controlSize(.small)
                     }
+                    if let message = model.lastExportMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
                     Spacer()
                 }
                 .padding(.horizontal, 10)
@@ -182,6 +194,20 @@ struct ContentView: View {
             }
         } else {
             EmptyStateView()
+        }
+    }
+
+    private func exportPanel(entry: WorkspaceModel.Entry) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [
+            UTType.commaSeparatedText,
+            UTType(filenameExtension: "parquet")
+        ].compactMap { $0 }
+        panel.nameFieldStringValue = "export.csv"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            let format: ExportFormat = url.pathExtension.lowercased() == "parquet" ? .parquet : .csv
+            model.export(entryID: entry.id, to: url, format: format)
         }
     }
 
@@ -259,11 +285,11 @@ private struct EmptyStateView: View {
 }
 
 private struct InspectorView: View {
-    let entry: WorkspaceModel.Entry?
+    @ObservedObject var model: WorkspaceModel
 
     var body: some View {
         Group {
-            if let entry {
+            if let entry = model.selectedEntry {
                 List {
                     Section("文件") {
                         LabeledContent("名称", value: entry.displayName)
@@ -271,15 +297,31 @@ private struct InspectorView: View {
                         LabeledContent("编码", value: entry.encoding.displayName)
                     }
                     Section("列") {
-                        ForEach(entry.columns, id: \.displayName) { column in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(column.displayName)
-                                    .fontWeight(.medium)
-                                Text(column.typeName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        ForEach(entry.columns, id: \.name) { column in
+                            Button {
+                                model.loadStats(entryID: entry.id, column: column.name)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(column.displayName)
+                                            .fontWeight(model.statsColumn == column.name ? .semibold : .regular)
+                                        Text(column.typeName)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if model.statsColumn == column.name, model.columnStats != nil {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(.tint)
+                                    }
+                                }
                             }
-                            .padding(.vertical, 1)
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if let stats = model.columnStats {
+                        Section("统计") {
+                            statsRows(stats)
                         }
                     }
                 }
@@ -291,5 +333,61 @@ private struct InspectorView: View {
             }
         }
         .listStyle(.sidebar)
+    }
+
+    @ViewBuilder
+    private func statsRows(_ stats: ColumnStats) -> some View {
+        LabeledContent("总行数", value: "\(stats.totalRows)")
+        LabeledContent("空值", value: "\(stats.nullCount)（\(String(format: "%.1f", stats.nullRate * 100))%）")
+        LabeledContent("去重值", value: "\(stats.distinctCount)")
+        if let minValue = stats.minValue, let maxValue = stats.maxValue {
+            LabeledContent("范围", value: "\(minValue) ~ \(maxValue)")
+        }
+        if let mean = stats.mean {
+            LabeledContent("均值", value: format(mean))
+        }
+        if let median = stats.median {
+            LabeledContent("中位数", value: format(median))
+        }
+        if let deviation = stats.standardDeviation {
+            LabeledContent("标准差", value: format(deviation))
+        }
+        if !stats.histogram.isEmpty {
+            let maxCount = max(1, stats.histogram.map(\.count).max() ?? 1)
+            HStack(alignment: .bottom, spacing: 2) {
+                ForEach(Array(stats.histogram.enumerated()), id: \.offset) { _, bucket in
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.accentColor)
+                        .frame(width: 6, height: max(2, 40 * CGFloat(bucket.count) / CGFloat(maxCount)))
+                }
+            }
+            .frame(height: 44)
+        }
+        if !stats.topValues.isEmpty {
+            ForEach(stats.topValues, id: \.self) { item in
+                HStack {
+                    Text(item.value)
+                        .font(.caption)
+                        .lineLimit(1)
+                    Spacer()
+                    Text("\(item.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        if !stats.timeBuckets.isEmpty {
+            ForEach(stats.timeBuckets.prefix(10), id: \.self) { bucket in
+                HStack {
+                    Text(bucket.label).font(.caption)
+                    Spacer()
+                    Text("\(bucket.count)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func format(_ value: Double) -> String {
+        String(format: "%.2f", value)
     }
 }

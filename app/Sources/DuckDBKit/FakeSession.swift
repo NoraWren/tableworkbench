@@ -20,6 +20,26 @@ public final class FakeSession: QuerySession, @unchecked Sendable {
         self.resultCount = rowCount
     }
 
+    public func columnStats(column: String) throws -> ColumnStats {
+        ColumnStats(
+            column: column,
+            typeName: "VARCHAR",
+            kind: .text,
+            totalRows: rowCount,
+            nullCount: 0,
+            distinctCount: 1,
+            minValue: nil,
+            maxValue: nil,
+            mean: nil,
+            median: nil,
+            standardDeviation: nil
+        )
+    }
+
+    public func export(to url: URL, format: ExportFormat) throws -> Int {
+        0
+    }
+
     public func pivot(spec: PivotSpec) throws -> SQLResult {
         SQLResult.empty
     }

@@ -265,6 +265,39 @@ func run() throws {
     do { _ = try query.session.pivot(spec: PivotSpec(rows: ["city"])) } catch { pivotInvalid = true }
     check("缺值字段被拒绝", pivotInvalid)
 
+    // 列统计与导出
+    let amountStats = try query.session.columnStats(column: "amount")
+    check("金额统计总数 6", amountStats.totalRows == 6 && amountStats.nullCount == 0 && amountStats.distinctCount == 6)
+    check("金额最小最大", amountStats.minValue == "30" && amountStats.maxValue == "400")
+    check("金额均值 180", abs((amountStats.mean ?? 0) - 180) < 0.001)
+    check("金额中位数 150", abs((amountStats.median ?? 0) - 150) < 0.001)
+    check("直方图 20 桶且计数 6", amountStats.histogram.count == 20 && amountStats.histogram.reduce(0) { $0 + $1.count } == 6)
+
+    let cityStats = try query.session.columnStats(column: "city")
+    check("城市高频值第一", cityStats.topValues.first?.value == "上海" && cityStats.topValues.first?.count == 4)
+
+    let nullStats = try opened.session.columnStats(column: "备注")
+    check("空值统计 2", nullStats.nullCount == 2)
+
+    let exportURL = working.appendingPathComponent("export.csv")
+    _ = try query.session.export(to: exportURL, format: .csv)
+    let exported = try FileImporter.open(url: exportURL)
+    check("CSV 导出行数 6", exported.session.rowCount == 6)
+
+    let parquetURL = working.appendingPathComponent("export.parquet")
+    _ = try query.session.export(to: parquetURL, format: .parquet)
+    let exportedParquet = try DuckDBSession.openParquet(url: parquetURL)
+    check("Parquet 导出行数 6", exportedParquet.rowCount == 6)
+
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "上海")
+    ])))
+    let filteredURL = working.appendingPathComponent("filtered.csv")
+    _ = try query.session.export(to: filteredURL, format: .csv)
+    let filteredExport = try FileImporter.open(url: filteredURL)
+    check("筛选导出 4 行", filteredExport.session.rowCount == 4)
+    try query.session.apply(view: .empty)
+
     // Parquet 缓存
     let cacheDirectory = working.appendingPathComponent("cache")
     let parquetCache = ParquetCache(baseDirectory: cacheDirectory, limitBytes: 100 * 1024 * 1024)

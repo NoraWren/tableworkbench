@@ -38,6 +38,7 @@ var repeatCount = 1
 var sqlStatement: String?
 var warmCache = false
 var pivotBench = false
+var statsColumn: String?
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -51,6 +52,13 @@ while argumentIndex < arguments.count {
     case "--desc":
         sortAscending = false
         argumentIndex += 1
+    case "--stats":
+        if argumentIndex + 1 < arguments.count {
+            statsColumn = arguments[argumentIndex + 1]
+            argumentIndex += 2
+        } else {
+            argumentIndex += 1
+        }
     case "--pivot":
         pivotBench = true
         argumentIndex += 1
@@ -106,6 +114,13 @@ do {
     let firstBlock = try opened.session.block(offset: 0, size: 1)
     let firstRow = firstBlock.rows.first ?? []
     let firstCell: String? = firstRow.first ?? nil
+
+    if let statsColumn {
+        let started = Date()
+        let stats = try opened.session.columnStats(column: statsColumn)
+        print("统计: \(stats.totalRows) 行, 空值 \(stats.nullCount), 去重 \(stats.distinctCount), 耗时 \(String(format: "%.3f", Date().timeIntervalSince(started))) 秒, 直方图 \(stats.histogram.count) 桶")
+        exit(0)
+    }
 
     if pivotBench {
         let spec = PivotSpec(

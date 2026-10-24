@@ -35,6 +35,10 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var sqlResult: SQLResult?
     @Published public private(set) var resultTitle: String?
     @Published public private(set) var isRunningSQL = false
+    @Published public private(set) var columnStats: ColumnStats?
+    @Published public private(set) var statsColumn: String?
+    @Published public private(set) var isLoadingStats = false
+    @Published public private(set) var lastExportMessage: String?
 
     public init() {}
 
@@ -188,6 +192,58 @@ public final class WorkspaceModel: ObservableObject {
                 error = outcome.1
             }
             isRunningSQL = false
+        }
+    }
+
+    public func loadStats(entryID: UUID, column: String) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let session = entries[index].session
+        statsColumn = column
+        columnStats = nil
+        isLoadingStats = true
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (ColumnStats?, ImportError?) in
+                do {
+                    return (try session.columnStats(column: column), nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "统计列"))
+                }
+            }.value
+
+            if statsColumn == column {
+                if let stats = outcome.0 {
+                    columnStats = stats
+                } else {
+                    error = outcome.1
+                }
+                isLoadingStats = false
+            }
+        }
+    }
+
+    public func export(entryID: UUID, to url: URL, format: ExportFormat) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let session = entries[index].session
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (Int?, ImportError?) in
+                do {
+                    return (try session.export(to: url, format: format), nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "导出"))
+                }
+            }.value
+
+            if let count = outcome.0 {
+                lastExportMessage = "已导出 \(count) 行到 \(url.lastPathComponent)"
+            } else {
+                error = outcome.1
+            }
         }
     }
 

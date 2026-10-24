@@ -164,6 +164,159 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         }
     }
 
+    public func columnStats(column: String) throws -> ColumnStats {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+        guard let info = columns.first(where: { $0.name == column }) else {
+            throw ImportError(userMessage: "列不存在", technicalDetail: column, recoverySuggestion: "重新选择一列。")
+        }
+
+        let table = hasResultTable ? "\"__result\"" : "\"__base\""
+        let identifier = SQLBuilder.quoteIdentifier(column)
+        let numeric = "TRY_CAST(\(identifier) AS DOUBLE)"
+
+        do {
+            let aggregate = try connection.query("""
+            SELECT count(*), count(\(identifier)), count(DISTINCT \(identifier)),
+                   CAST(min(\(identifier)) AS VARCHAR), CAST(max(\(identifier)) AS VARCHAR),
+                   avg(\(numeric)), median(\(numeric)), stddev_pop(\(numeric))
+            FROM \(table)
+            """)
+            let total = Int(aggregate.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+            let nonNull = Int(aggregate.column(at: 1).cast(to: Int64.self)[0] ?? 0)
+            let distinct = Int(aggregate.column(at: 2).cast(to: Int64.self)[0] ?? 0)
+            let minValue = aggregate.column(at: 3).cast(to: String.self)[0]
+            let maxValue = aggregate.column(at: 4).cast(to: String.self)[0]
+            let mean = aggregate.column(at: 5).cast(to: Double.self)[0]
+            let median = aggregate.column(at: 6).cast(to: Double.self)[0]
+            let deviation = aggregate.column(at: 7).cast(to: Double.self)[0]
+
+            var topValues: [TopValue] = []
+            let top = try connection.query("""
+            SELECT CAST(\(identifier) AS VARCHAR) AS v, count(*) AS c
+            FROM \(table) WHERE \(identifier) IS NOT NULL
+            GROUP BY 1 ORDER BY 2 DESC, 1 ASC LIMIT 10
+            """)
+            let topValueColumn = top.column(at: 0).cast(to: String.self)
+            let topCountColumn = top.column(at: 1).cast(to: Int64.self)
+            for index in 0..<Int(top.rowCount) {
+                topValues.append(TopValue(
+                    value: topValueColumn[DBInt(index)] ?? "",
+                    count: Int(topCountColumn[DBInt(index)] ?? 0)
+                ))
+            }
+
+            var histogram: [HistogramBucket] = []
+            if info.kind.isNumeric, let minValue, let maxValue,
+               let lower = Double(minValue), let upper = Double(maxValue), upper > lower {
+                let step = (upper - lower) / 20
+                let bucketQuery = try connection.query("""
+                SELECT least(19, greatest(0, CAST(floor((\(numeric) - \(lower)) / \(step)) AS INTEGER))) AS b, count(*)
+                FROM \(table) WHERE \(identifier) IS NOT NULL AND \(numeric) IS NOT NULL
+                GROUP BY b ORDER BY b
+                """)
+                var counts = Array(repeating: 0, count: 20)
+                let bucketColumn = bucketQuery.column(at: 0).cast(to: Int64.self)
+                let countColumn = bucketQuery.column(at: 1).cast(to: Int64.self)
+                for index in 0..<Int(bucketQuery.rowCount) {
+                    let bucket = Int(bucketColumn[DBInt(index)] ?? 0)
+                    let count = Int(countColumn[DBInt(index)] ?? 0)
+                    let clamped = min(19, max(0, bucket - 1))
+                    counts[clamped] += count
+                }
+                for index in 0..<20 {
+                    histogram.append(HistogramBucket(
+                        lower: lower + step * Double(index),
+                        upper: lower + step * Double(index + 1),
+                        count: counts[index]
+                    ))
+                }
+            }
+
+            var timeBuckets: [TimeBucket] = []
+            if info.kind == .date || info.kind == .timestamp {
+                let timeQuery = try connection.query("""
+                SELECT CAST(date_trunc('day', CAST(\(identifier) AS TIMESTAMP)) AS VARCHAR) AS d, count(*)
+                FROM \(table) WHERE \(identifier) IS NOT NULL
+                GROUP BY 1 ORDER BY 1 LIMIT 62
+                """)
+                let labelColumn = timeQuery.column(at: 0).cast(to: String.self)
+                let countColumn = timeQuery.column(at: 1).cast(to: Int64.self)
+                for index in 0..<Int(timeQuery.rowCount) {
+                    timeBuckets.append(TimeBucket(
+                        label: labelColumn[DBInt(index)] ?? "",
+                        count: Int(countColumn[DBInt(index)] ?? 0)
+                    ))
+                }
+            }
+
+            return ColumnStats(
+                column: column,
+                typeName: info.typeName,
+                kind: info.kind,
+                totalRows: total,
+                nullCount: total - nonNull,
+                distinctCount: distinct,
+                minValue: minValue,
+                maxValue: maxValue,
+                mean: mean,
+                median: median,
+                standardDeviation: deviation,
+                topValues: topValues,
+                histogram: histogram,
+                timeBuckets: timeBuckets
+            )
+        } catch let error as ImportError {
+            throw error
+        } catch {
+            throw ImportError(userMessage: "统计失败", technicalDetail: String(describing: error), recoverySuggestion: "换一列再试。")
+        }
+    }
+
+    public func export(to url: URL, format: ExportFormat) throws -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+
+        let table = hasResultTable ? "\"__result\"" : "\"__base\""
+        let columnsSQL = SQLBuilder.columnList(columns)
+        let temporary = url.appendingPathExtension("tmp-\(UUID().uuidString)")
+        try? FileManager.default.removeItem(at: temporary)
+
+        let destination = temporary.path.replacingOccurrences(of: "'", with: "''")
+        let options: String
+        switch format {
+        case .csv:
+            options = "FORMAT CSV, HEADER, DELIMITER ','"
+        case .parquet:
+            options = "FORMAT PARQUET, COMPRESSION SNAPPY"
+        }
+        let sql = "COPY (SELECT \(columnsSQL) FROM \(table)) TO '\(destination)' (\(options))"
+
+        do {
+            try connection.execute(sql)
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+            try FileManager.default.moveItem(at: temporary, to: url)
+            return resultCount
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            throw ImportError(
+                userMessage: "导出失败",
+                technicalDetail: String(describing: error),
+                recoverySuggestion: "确认目标目录有写权限，换一个位置再试。"
+            )
+        }
+    }
+
     public func pivot(spec: PivotSpec) throws -> SQLResult {
         lock.lock()
         defer { lock.unlock() }
