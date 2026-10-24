@@ -44,7 +44,7 @@
 
 - [x] 6.1 写 scripts/make-bench-data.sh，生成 500MB CSV、10 万行宽表和 GBK 样本，验证脚本在空目录能一键生成
 - [x] 6.2 写 scripts/bench.sh，记录打开耗时、峰值内存、第 1/10/100 块查询耗时，验证输出为可读表格
-- [ ] 6.3 跑一次完整基准并写入 docs/bench-history.md，验证 500MB CSV 打开不超过 3 秒（已达标 0.61 秒）；10 万行滚动帧率待屏幕解锁后补测
+- [x] 6.3 跑一次完整基准并写入 docs/bench-history.md，验证 500MB CSV 打开不超过 3 秒（命中缓存 0.6–0.8 秒，冷打开 2.1–2.4 秒）；滚动帧耗时已用 TableWorkbenchScrollBench 补测
 - [x] 6.4 跑 swift test，验证编码探测、块换算、写语句拦截三组测试全部通过
 
 ## 7. 收尾
