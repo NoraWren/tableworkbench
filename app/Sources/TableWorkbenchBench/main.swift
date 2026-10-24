@@ -37,6 +37,7 @@ var filterValue: String?
 var repeatCount = 1
 var sqlStatement: String?
 var warmCache = false
+var pivotBench = false
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -49,6 +50,9 @@ while argumentIndex < arguments.count {
         }
     case "--desc":
         sortAscending = false
+        argumentIndex += 1
+    case "--pivot":
+        pivotBench = true
         argumentIndex += 1
     case "--warm-cache":
         warmCache = true
@@ -102,6 +106,17 @@ do {
     let firstBlock = try opened.session.block(offset: 0, size: 1)
     let firstRow = firstBlock.rows.first ?? []
     let firstCell: String? = firstRow.first ?? nil
+
+    if pivotBench {
+        let spec = PivotSpec(
+            rows: ["区域", "渠道"],
+            columns: ["状态"],
+            values: [PivotValue(column: "金额", aggregate: .sum)]
+        )
+        let result = try opened.session.pivot(spec: spec)
+        print("透视: \(result.rowCount) 行, \(String(format: "%.3f", result.elapsed)) 秒, 列数 \(result.columns.count)")
+        exit(0)
+    }
 
     if let sqlStatement {
         let result = try opened.session.runSQL(sqlStatement)

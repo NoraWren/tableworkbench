@@ -164,6 +164,119 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         }
     }
 
+    public func pivot(spec: PivotSpec) throws -> SQLResult {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+        guard spec.isValid else {
+            throw ImportError(
+                userMessage: "透视配置不完整",
+                technicalDetail: "至少需要一个行字段和一个值字段",
+                recoverySuggestion: "把字段拖到行和值区域。"
+            )
+        }
+
+        let known = Set(columns.map(\.name))
+        let allFields = spec.rows + spec.columns + spec.values.map(\.column)
+        for field in allFields where !known.contains(field) {
+            throw ImportError(userMessage: "字段不存在", technicalDetail: field, recoverySuggestion: "重新选择字段。")
+        }
+
+        let table = hasResultTable ? "\"__result\"" : "\"__base\""
+        let rowSQL = spec.rows.map(SQLBuilder.quoteIdentifier).joined(separator: ", ")
+        let started = Foundation.Date()
+
+        do {
+            let distinctRows = try connection.query(
+                "SELECT count(*) FROM (SELECT DISTINCT \(rowSQL) FROM \(table)) AS t"
+            )
+            let rowCount = Int(distinctRows.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+            guard rowCount <= 5000 else {
+                throw ImportError(
+                    userMessage: "行维度太多了",
+                    technicalDetail: "去重后有 \(rowCount) 行，上限 5000",
+                    recoverySuggestion: "换一个基数更低的字段，或先加筛选。"
+                )
+            }
+
+            var selectParts = spec.rows.map(SQLBuilder.quoteIdentifier)
+            if spec.columns.isEmpty {
+                for value in spec.values {
+                    selectParts.append("\(aggregateSQL(value, condition: nil)) AS \(SQLBuilder.quoteIdentifier(value.title))")
+                }
+            } else {
+                let columnSQL = spec.columns.map { "CAST(\(SQLBuilder.quoteIdentifier($0)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier($0))" }
+                    .joined(separator: ", ")
+                let conditions = spec.columns.map { "\(SQLBuilder.quoteIdentifier($0)) IS NOT NULL" }.joined(separator: " AND ")
+                let combosResult = try connection.query(
+                    "SELECT DISTINCT \(columnSQL) FROM \(table) WHERE \(conditions) LIMIT 201"
+                )
+                let comboCount = Int(combosResult.rowCount)
+                guard comboCount <= 200 else {
+                    throw ImportError(
+                        userMessage: "列维度太多了",
+                        technicalDetail: "去重后超过 200 个组合",
+                        recoverySuggestion: "换一个基数更低的列，或改用行维度。"
+                    )
+                }
+                guard comboCount > 0 else {
+                    throw ImportError(userMessage: "列维度没有可用值", technicalDetail: nil, recoverySuggestion: "换一个字段。")
+                }
+
+                var typed: [Column<String>] = []
+                for index in 0..<Int(combosResult.columnCount) {
+                    typed.append(combosResult.column(at: DBInt(index)).cast(to: String.self))
+                }
+                var combos: [[String]] = []
+                combos.reserveCapacity(comboCount)
+                for rowIndex in 0..<comboCount {
+                    var combo: [String] = []
+                    for column in typed {
+                        combo.append(column[DBInt(rowIndex)] ?? "")
+                    }
+                    combos.append(combo)
+                }
+
+                for value in spec.values {
+                    for combo in combos {
+                        let condition = zip(spec.columns, combo)
+                            .map { "\(SQLBuilder.quoteIdentifier($0.0)) = \(SQLBuilder.literal($0.1))" }
+                            .joined(separator: " AND ")
+                        let name = "\(value.title) / \(combo.joined(separator: " / "))"
+                        selectParts.append("\(aggregateSQL(value, condition: condition)) AS \(SQLBuilder.quoteIdentifier(name))")
+                    }
+                }
+            }
+
+            let sql = "SELECT \(selectParts.joined(separator: ", ")) FROM \(table) GROUP BY \(rowSQL) ORDER BY \(rowSQL)"
+            return try executeSelect(sql, connection: connection, started: started)
+        } catch let error as ImportError {
+            throw error
+        } catch {
+            throw ImportError(
+                userMessage: "透视执行失败",
+                technicalDetail: String(describing: error),
+                recoverySuggestion: "减少维度后重试。"
+            )
+        }
+    }
+
+    private func aggregateSQL(_ value: PivotValue, condition: String?) -> String {
+        let column = SQLBuilder.quoteIdentifier(value.column)
+        let inner = condition.map { "CASE WHEN \($0) THEN \(column) END" } ?? column
+        switch value.aggregate {
+        case .sum: return "SUM(\(inner))"
+        case .count: return "COUNT(\(inner))"
+        case .countDistinct: return "COUNT(DISTINCT \(inner))"
+        case .average: return "AVG(\(inner))"
+        case .minimum: return "MIN(\(inner))"
+        case .maximum: return "MAX(\(inner))"
+        }
+    }
+
     public func runSQL(_ sql: String) throws -> SQLResult {
         lock.lock()
         defer { lock.unlock() }

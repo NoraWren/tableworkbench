@@ -228,6 +228,43 @@ func run() throws {
     let totalAfterFilter = try query.session.runSQL("SELECT count(*) FROM data")
     check("data 视图不受筛选影响", totalAfterFilter.rows.first?.first == "6")
 
+    // 透视
+    try query.session.apply(view: .empty)
+
+    let pivotSum = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    check("透视三行", pivotSum.rowCount == 3)
+    let shanghai = pivotSum.rows.first { $0.first == "上海" }
+    check("上海求和 1000", shanghai?[1] == "1000")
+
+    let pivotCross = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        columns: ["name"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    check("交叉表七列", pivotCross.columns.count == 7)
+
+    let pivotCount = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "name", aggregate: .count)]
+    ))
+    check("上海计数 4", pivotCount.rows.first { $0.first == "上海" }?[1] == "4")
+
+    let pivotMulti = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [
+            PivotValue(column: "amount", aggregate: .sum),
+            PivotValue(column: "amount", aggregate: .average)
+        ]
+    ))
+    check("多值三列", pivotMulti.columns.count == 3)
+
+    var pivotInvalid = false
+    do { _ = try query.session.pivot(spec: PivotSpec(rows: ["city"])) } catch { pivotInvalid = true }
+    check("缺值字段被拒绝", pivotInvalid)
+
     // Parquet 缓存
     let cacheDirectory = working.appendingPathComponent("cache")
     let parquetCache = ParquetCache(baseDirectory: cacheDirectory, limitBytes: 100 * 1024 * 1024)

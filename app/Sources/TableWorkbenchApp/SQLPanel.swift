@@ -42,12 +42,13 @@ struct SQLEditor: View {
 
 struct SQLResultView: View {
     let result: SQLResult
+    let title: String
     let onClose: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text("查询结果")
+                Text(title)
                     .font(.headline)
                 Text("\(result.rowCount) 行 · \(String(format: "%.2f", result.elapsed)) 秒")
                     .font(.caption)

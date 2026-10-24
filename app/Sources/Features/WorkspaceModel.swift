@@ -33,6 +33,7 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var isQuerying = false
     @Published public private(set) var sqlResult: SQLResult?
+    @Published public private(set) var resultTitle: String?
     @Published public private(set) var isRunningSQL = false
 
     public init() {}
@@ -141,6 +142,7 @@ public final class WorkspaceModel: ObservableObject {
         let session = entries[index].session
         isRunningSQL = true
         sqlResult = nil
+        resultTitle = "查询结果"
 
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> (SQLResult?, ImportError?) in
@@ -162,8 +164,36 @@ public final class WorkspaceModel: ObservableObject {
         }
     }
 
+    public func runPivot(entryID: UUID, spec: PivotSpec) {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }), spec.isValid else { return }
+        let session = entries[index].session
+        isRunningSQL = true
+        sqlResult = nil
+        resultTitle = "透视结果"
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (SQLResult?, ImportError?) in
+                do {
+                    return (try session.pivot(spec: spec), nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "执行透视"))
+                }
+            }.value
+
+            if let result = outcome.0 {
+                sqlResult = result
+            } else {
+                error = outcome.1
+            }
+            isRunningSQL = false
+        }
+    }
+
     public func clearSQLResult() {
         sqlResult = nil
+        resultTitle = nil
     }
 
     public func closeSelected() {

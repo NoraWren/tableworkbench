@@ -7,6 +7,7 @@ import DuckDBKit
 
 private final class PopoverState: ObservableObject {
     @Published var filterShown = false
+    @Published var pivotShown = false
 }
 
 struct ContentView: View {
@@ -53,6 +54,21 @@ struct ContentView: View {
                             FilterPanel(columns: entry.columns, initial: entry.filter) { filter in
                                 model.applyFilter(entryID: entry.id, filter: filter)
                                 popover.filterShown = false
+                            }
+                        }
+                    }
+
+                    if let entry = model.selectedEntry {
+                        Button {
+                            popover.pivotShown.toggle()
+                        } label: {
+                            Label("透视", systemImage: "square.grid.3x3")
+                        }
+                        .help("拖拽字段生成透视表")
+                        .popover(isPresented: $popover.pivotShown, arrowEdge: .bottom) {
+                            PivotPanel(columns: entry.columns) { spec in
+                                model.runPivot(entryID: entry.id, spec: spec)
+                                popover.pivotShown = false
                             }
                         }
                     }
@@ -106,7 +122,7 @@ struct ContentView: View {
     @ViewBuilder
     private var detailContent: some View {
         if let result = model.sqlResult {
-            SQLResultView(result: result) {
+            SQLResultView(result: result, title: model.resultTitle ?? "查询结果") {
                 model.clearSQLResult()
             }
         } else if let entry = model.selectedEntry {

@@ -12,6 +12,8 @@ public protocol QuerySession: AnyObject, Sendable {
     func apply(view: QueryView) throws
     /// 执行一条用户 SQL，结果最多 100000 行。
     func runSQL(_ sql: String) throws -> SQLResult
+    /// 按透视配置生成交叉表。
+    func pivot(spec: PivotSpec) throws -> SQLResult
     func block(offset: Int, size: Int) throws -> TableBlock
     func close()
 }
