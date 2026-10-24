@@ -489,6 +489,27 @@ func run() throws {
     check("历史清空", history.entries.isEmpty && SQLHistoryStore(defaults: historyDefaults, key: "test").entries.isEmpty)
     historyDefaults.removePersistentDomain(forName: historySuite)
 
+    // SQL 片段
+    let snippetSuite = "tableworkbench.snippets.\(UUID().uuidString)"
+    let snippetDefaults = UserDefaults(suiteName: snippetSuite)!
+    let snippetStore = SQLSnippetStore(defaults: snippetDefaults, key: "test")
+    snippetStore.save(name: "每月毛利", sql: "SELECT 1")
+    check("片段保存", snippetStore.entries.count == 1 && snippetStore.entries.first?.name == "每月毛利")
+    snippetStore.save(name: "每月毛利", sql: "SELECT 2")
+    check("片段同名覆盖", snippetStore.entries.count == 1 && snippetStore.entries.first?.sql == "SELECT 2")
+    snippetStore.save(name: "  ", sql: "SELECT 3")
+    snippetStore.save(name: "空语句", sql: "  ")
+    check("片段空值拒绝", snippetStore.entries.count == 1)
+    snippetStore.save(name: "区域汇总", sql: "SELECT 4")
+    check("片段两条", snippetStore.entries.count == 2)
+    let reloadedSnippets = SQLSnippetStore(defaults: snippetDefaults, key: "test")
+    check("片段持久化", reloadedSnippets.entries.count == 2)
+    snippetStore.remove(id: snippetStore.entries[0].id)
+    check("片段删除", snippetStore.entries.count == 1)
+    snippetStore.clear()
+    check("片段清空", snippetStore.entries.isEmpty && SQLSnippetStore(defaults: snippetDefaults, key: "test").entries.isEmpty)
+    snippetDefaults.removePersistentDomain(forName: snippetSuite)
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {

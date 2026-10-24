@@ -31,10 +31,21 @@ struct ContentView: View {
     @StateObject private var sql = SQLState()
     @StateObject private var sheetPrompt = SheetPromptState()
     @StateObject private var computed = ComputedColumnState()
+    @StateObject private var snippets = SQLSnippetStore()
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(model: model)
+            SidebarView(
+                model: model,
+                snippets: snippets.entries,
+                onOpenSnippet: { snippet in
+                    sql.text = snippet.sql
+                    sqlShown = true
+                },
+                onDeleteSnippet: { snippet in
+                    snippets.remove(id: snippet.id)
+                }
+            )
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
         } detail: {
             VStack(spacing: 0) {
@@ -42,7 +53,12 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if sqlShown {
                     Divider()
-                    SQLEditor(state: sql, isRunning: model.isRunningSQL, history: model.sqlHistory) {
+                    SQLEditor(
+                        state: sql,
+                        isRunning: model.isRunningSQL,
+                        history: model.sqlHistory,
+                        snippets: snippets
+                    ) {
                         if let entry = model.selectedEntry {
                             model.runSQL(entryID: entry.id, sql: sql.text)
                         }
@@ -311,9 +327,29 @@ struct ContentView: View {
 
 private struct SidebarView: View {
     @ObservedObject var model: WorkspaceModel
+    let snippets: [SQLSnippet]
+    let onOpenSnippet: (SQLSnippet) -> Void
+    let onDeleteSnippet: (SQLSnippet) -> Void
 
     var body: some View {
         List(selection: $model.selection) {
+            if !snippets.isEmpty {
+                Section("SQL 片段") {
+                    ForEach(snippets) { snippet in
+                        Button {
+                            onOpenSnippet(snippet)
+                        } label: {
+                            Text(snippet.name)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("删除") { onDeleteSnippet(snippet) }
+                        }
+                    }
+                }
+            }
+
             Section("数据源") {
                 ForEach(model.entries) { entry in
                     VStack(alignment: .leading, spacing: 2) {

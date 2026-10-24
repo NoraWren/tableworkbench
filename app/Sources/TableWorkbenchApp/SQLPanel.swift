@@ -13,13 +13,20 @@ private final class HistoryPanelState: ObservableObject {
     @Published var search = ""
 }
 
+private final class SnippetPanelState: ObservableObject {
+    @Published var shown = false
+    @Published var name = ""
+}
+
 struct SQLEditor: View {
     @ObservedObject var state: SQLState
     let isRunning: Bool
     @ObservedObject var history: SQLHistoryStore
+    @ObservedObject var snippets: SQLSnippetStore
     let onRun: () -> Void
 
     @StateObject private var panel = HistoryPanelState()
+    @StateObject private var snippetPanel = SnippetPanelState()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -37,6 +44,30 @@ struct SQLEditor: View {
                 }
                 .popover(isPresented: $panel.shown) {
                     historyPanel
+                }
+
+                Button {
+                    snippetPanel.shown.toggle()
+                } label: {
+                    Label("存为片段", systemImage: "bookmark")
+                }
+                .popover(isPresented: $snippetPanel.shown) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("存为片段").font(.headline)
+                        TextField("片段名称", text: $snippetPanel.name)
+                            .textFieldStyle(.roundedBorder)
+                        HStack {
+                            Spacer()
+                            Button("保存") {
+                                snippets.save(name: snippetPanel.name, sql: state.text)
+                                snippetPanel.name = ""
+                                snippetPanel.shown = false
+                            }
+                            .disabled(snippetPanel.name.trimmingCharacters(in: .whitespaces).isEmpty)
+                        }
+                    }
+                    .padding(14)
+                    .frame(width: 320)
                 }
                 if isRunning {
                     ProgressView()
