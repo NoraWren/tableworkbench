@@ -102,6 +102,7 @@ public final class WorkspaceModel: ObservableObject {
                 return (files, firstError)
             }.value
 
+            var firstAdded: UUID?
             for file in result.files {
                 if let existing = entries.first(where: {
                     $0.url == file.url && $0.sheetName == file.sheetName
@@ -118,7 +119,11 @@ public final class WorkspaceModel: ObservableObject {
                     sheetName: file.sheetName
                 )
                 entries.append(entry)
-                if selection == nil { selection = entry.id }
+                if firstAdded == nil { firstAdded = entry.id }
+            }
+            // 刚打开的文件直接选中，别让用户以为没反应。
+            if let firstAdded {
+                selection = firstAdded
             }
             error = result.error
             isLoading = false
@@ -159,6 +164,7 @@ public final class WorkspaceModel: ObservableObject {
 
     private func apply(view: QueryView, to index: Int) {
         let session = entries[index].session
+        let entryID = entries[index].id
         isQuerying = true
 
         Task {
@@ -174,10 +180,13 @@ public final class WorkspaceModel: ObservableObject {
             }.value
 
             if let count = outcome.count {
-                entries[index].sort = view.sort
-                entries[index].filter = view.filter
-                entries[index].resultCount = count
-                entries[index].queryVersion += 1
+                // 查询期间可能关掉或打开别的文件，按 id 重新定位，别写错行。
+                if let current = entries.firstIndex(where: { $0.id == entryID }) {
+                    entries[current].sort = view.sort
+                    entries[current].filter = view.filter
+                    entries[current].resultCount = count
+                    entries[current].queryVersion += 1
+                }
             } else {
                 error = outcome.error
             }
