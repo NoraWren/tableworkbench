@@ -250,6 +250,16 @@ func run() throws {
     let tempRead = try query.session.runSQL("SELECT * FROM t")
     check("临时表可查询", tempRead.rows.first?.first == "1")
 
+    // 临时表只活在当前会话，关掉就没了
+    let tempOwner = try FileImporter.open(url: queryCSV)
+    _ = try tempOwner.session.runSQL("CREATE TEMP TABLE keep AS SELECT 1 AS a")
+    tempOwner.session.close()
+    let reopened = try FileImporter.open(url: queryCSV)
+    var tempTableGone = false
+    do { _ = try reopened.session.runSQL("SELECT * FROM keep") } catch { tempTableGone = true }
+    check("关闭会话后临时表消失", tempTableGone)
+    reopened.session.close()
+
     let truncated = try query.session.runSQL("SELECT * FROM range(100001)")
     check("SQL 结果截断到 10 万", truncated.rowCount == 100000 && truncated.truncated)
 
