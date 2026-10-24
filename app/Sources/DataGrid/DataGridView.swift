@@ -85,6 +85,7 @@ public struct DataGridView: NSViewRepresentable {
     public let provider: (Int, Int) throws -> TableBlock
     public let onSortClick: (String, Bool) -> Void
     public let onSelectionChange: (IndexSet) -> Void
+    public let onRowActivate: (Int) -> Void
     public let onError: (Error) -> Void
 
     public init(
@@ -94,6 +95,7 @@ public struct DataGridView: NSViewRepresentable {
         provider: @escaping (Int, Int) throws -> TableBlock,
         onSortClick: @escaping (String, Bool) -> Void = { _, _ in },
         onSelectionChange: @escaping (IndexSet) -> Void = { _ in },
+        onRowActivate: @escaping (Int) -> Void = { _ in },
         onError: @escaping (Error) -> Void
     ) {
         self.columns = columns
@@ -102,6 +104,7 @@ public struct DataGridView: NSViewRepresentable {
         self.provider = provider
         self.onSortClick = onSortClick
         self.onSelectionChange = onSelectionChange
+        self.onRowActivate = onRowActivate
         self.onError = onError
     }
 
@@ -130,6 +133,9 @@ public struct DataGridView: NSViewRepresentable {
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
+        tableView.target = tableView
+        tableView.doubleAction = #selector(GridTableView.activateRow(_:))
+        tableView.onRowActivate = onRowActivate
 
         let scrollView = NSScrollView()
         scrollView.documentView = tableView
@@ -164,6 +170,9 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.onError = onError
         dataSource.onSortClick = onSortClick
         dataSource.onSelectionChange = onSelectionChange
+        if let tableView = dataSource.contentTableView as? GridTableView {
+            tableView.onRowActivate = onRowActivate
+        }
         dataSource.computedColumnNames = Set(columns.filter(\.isComputed).map(\.name))
 
         let changed = dataSource.columns != visibleColumns

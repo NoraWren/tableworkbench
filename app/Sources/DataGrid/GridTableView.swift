@@ -1,6 +1,15 @@
 import AppKit
 
 public final class GridTableView: NSTableView {
+    /// 双击行时回传行号，由外层决定怎么展示。
+    public var onRowActivate: ((Int) -> Void)?
+
+    @objc public func activateRow(_ sender: Any?) {
+        let row = clickedRow
+        guard row >= 0 else { return }
+        onRowActivate?(row)
+    }
+
     @objc public func copy(_ sender: Any?) {
         guard let source = dataSource as? GridDataSource else { return }
         let rows = selectedRowIndexes

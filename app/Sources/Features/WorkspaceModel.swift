@@ -5,6 +5,35 @@ import DuckDBKit
 @MainActor
 public final class WorkspaceModel: ObservableObject {
     public let sqlHistory = SQLHistoryStore()
+
+    public struct RowField: Identifiable, Sendable {
+        public let id = UUID()
+        public let name: String
+        public let value: String?
+
+        public init(name: String, value: String?) {
+            self.name = name
+            self.value = value
+        }
+    }
+
+    public struct RowDetail: Identifiable, Sendable {
+        public let id = UUID()
+        public let row: Int
+        public let fields: [RowField]
+
+        public init(row: Int, fields: [RowField]) {
+            self.row = row
+            self.fields = fields
+        }
+
+        /// 两列 TSV：列名、值。空值写成空串，方便直接贴进表格。
+        public var tsv: String {
+            fields.map { field in
+                "\(field.name)\t\(field.value ?? "")"
+            }.joined(separator: "\n")
+        }
+    }
     public struct Entry: Identifiable {
         public let id: UUID
         public let url: URL
@@ -49,6 +78,7 @@ public final class WorkspaceModel: ObservableObject {
             isLoadingStats = false
             // 选中行也跟着换，避免把上一份的行号导出去。
             selectedRows = []
+            rowDetail = nil
         }
     }
     @Published public private(set) var error: ImportError?
@@ -64,6 +94,7 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var lastExportMessage: String?
     /// 网格里当前选中的行，导出“选中行”时用。
     @Published public private(set) var selectedRows: IndexSet = []
+    @Published public private(set) var rowDetail: RowDetail?
     /// 宽表里用户手动启用的列，按文件记。默认只显示前 200 列。
     @Published private var enabledColumns: [UUID: Set<String>] = [:]
 
@@ -323,6 +354,38 @@ public final class WorkspaceModel: ObservableObject {
     public func updateSelectedRows(_ rows: IndexSet) {
         guard rows != selectedRows else { return }
         selectedRows = rows
+    }
+
+    /// 双击一行后取这一行的全部显示列，宽表只取裁剪后的列。
+    public func loadRowDetail(entryID: UUID, row: Int) {
+        guard let entry = entries.first(where: { $0.id == entryID }) else { return }
+        let session = entry.session
+        let columns = shownColumns(for: entry)
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> ([String?]?, ImportError?) in
+                do {
+                    let block = try session.block(offset: row, size: 1, columns: columns)
+                    return (block.rows.first, nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "读取行"))
+                }
+            }.value
+
+            if let values = outcome.0 {
+                let fields = zip(columns, values).map { column, value in
+                    RowField(name: column.displayName, value: value)
+                }
+                rowDetail = RowDetail(row: row, fields: fields)
+            } else {
+                error = outcome.1
+            }
+        }
+    }
+
+    public func dismissRowDetail() {
+        rowDetail = nil
     }
 
     public func export(entryID: UUID, to url: URL, format: ExportFormat, scope: ExportScope = .view) {

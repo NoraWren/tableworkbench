@@ -138,6 +138,17 @@ func run() throws {
         let withExtra = ColumnVisibility.shown(wideColumns, enabled: enabled)
         check("启用第 2100 列", withExtra.count == 201 && withExtra.contains { $0.name == "列2099" })
         check("启用后排在第 201 位", withExtra.last?.name == "列2099")
+
+        // 行详情在宽表上只取 200 列，别一次拉 3000 个字段
+        let detailStart = Date()
+        let detailBlock = try openedWide.session.block(
+            offset: 0,
+            size: 1,
+            columns: ColumnVisibility.shown(wideColumns, enabled: nil)
+        )
+        let detailSeconds = Date().timeIntervalSince(detailStart)
+        check("宽表行详情 200 列", detailBlock.rows.first?.count == 200)
+        check("宽表行详情 300 毫秒内", detailSeconds < 0.3)
         openedWide.session.close()
     } else {
         print("SKIP  3000 列文件不存在，先跑 make-bench-data")
@@ -696,6 +707,15 @@ func run() throws {
     check("记录选中行", MainActor.assumeIsolated { model.selectedRows == IndexSet([0, 1]) })
     MainActor.assumeIsolated { model.selection = secondID }
     check("换文件清空选中行", MainActor.assumeIsolated { model.selectedRows.isEmpty })
+
+    // 行详情：只取一行，宽表按显示列裁剪
+    MainActor.assumeIsolated { model.selection = firstID }
+    MainActor.assumeIsolated { model.loadRowDetail(entryID: firstID!, row: 0) }
+    waitFor { MainActor.assumeIsolated { model.rowDetail != nil } }
+    let detail = MainActor.assumeIsolated { model.rowDetail }
+    check("行详情列出全部列", detail?.fields.count == 2)
+    check("行详情首字段是行名", detail?.fields.first?.name == "name" && detail?.fields.first?.value == "a")
+    check("行详情 TSV 两列", detail?.tsv.split(separator: "\n").count == 2 && detail?.tsv.contains("\t") == true)
     MainActor.assumeIsolated {
         for entry in model.entries { entry.session.close() }
     }

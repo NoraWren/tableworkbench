@@ -244,10 +244,21 @@ struct ContentView: View {
         }
         .sheet(isPresented: $export.isPresented) {
             ExportSheet(state: export) {
+                let entryID = export.entryID
+                let scope = export.exportScope
+                let format = export.format
                 export.isPresented = false
-                savePanel()
+                // 等确认框收起来再弹保存面板，两个模态叠在一起会有一个卡住不显示。
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    savePanel(entryID: entryID, format: format, scope: scope)
+                }
             } onCancel: {
                 export.isPresented = false
+            }
+        }
+        .sheet(isPresented: rowDetailShown) {
+            if let detail = model.rowDetail {
+                RowDetailSheet(detail: detail) { model.dismissRowDetail() }
             }
         }
         .overlay(alignment: .bottom) {
@@ -377,6 +388,9 @@ struct ContentView: View {
                     onSelectionChange: { rows in
                         model.updateSelectedRows(rows)
                     },
+                    onRowActivate: { row in
+                        model.loadRowDetail(entryID: entry.id, row: row)
+                    },
                     onError: { error in
                         let importError = (error as? ImportError) ?? ImportError.wrap(error, step: "读取数据")
                         Task { @MainActor in
@@ -412,10 +426,17 @@ struct ContentView: View {
         export.present(entry: entry, selectedRows: model.selectedRows)
     }
 
-    private func savePanel() {
-        guard let entryID = export.entryID else { return }
-        let scope = export.exportScope
-        let format = export.format
+    private var rowDetailShown: Binding<Bool> {
+        Binding(
+            get: { model.rowDetail != nil },
+            set: { shown in
+                if !shown { model.dismissRowDetail() }
+            }
+        )
+    }
+
+    private func savePanel(entryID: UUID?, format: ExportFormat, scope: ExportScope) {
+        guard let entryID else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [
             UTType.commaSeparatedText,
@@ -438,6 +459,62 @@ struct ContentView: View {
         if panel.runModal() == .OK {
             handleOpen(urls: panel.urls)
         }
+    }
+}
+
+/// 双击一行后的详情：竖排看全部字段，长文本不截断，可整行复制。
+private struct RowDetailSheet: View {
+    let detail: WorkspaceModel.RowDetail
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("第 \(detail.row + 1) 行").font(.headline)
+                Spacer()
+                Text("\(detail.fields.count) 个字段")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(detail.fields) { field in
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(field.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 110, alignment: .trailing)
+                            Text(field.value ?? "(空)")
+                                .textSelection(.enabled)
+                                .foregroundStyle(field.value == nil ? .tertiary : .primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                .padding(20)
+            }
+
+            Divider()
+
+            HStack {
+                Button("复制这一行") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(detail.tsv, forType: .string)
+                }
+                Spacer()
+                Button("关闭", action: onClose)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+        }
+        .frame(width: 520, height: 560)
     }
 }
 
