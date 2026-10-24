@@ -51,7 +51,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
             let database = try Database(store: .inMemory)
             let connection = try database.connect()
-            try connection.execute("SET memory_limit='900MB'")
+            try connection.execute("SET memory_limit='1200MB'")
             try connection.execute("SET temp_directory='\(temporaryDirectory.path.replacingOccurrences(of: "'", with: "''"))'")
 
             let createTable: String
