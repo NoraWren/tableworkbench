@@ -72,7 +72,8 @@ struct ContentView: View {
                         } label: {
                             Label("导出", systemImage: "square.and.arrow.up")
                         }
-                        .help("导出当前视图")
+                        .keyboardShortcut("e", modifiers: [.command, .shift])
+                        .help("导出当前视图（Shift+Command+E）")
 
                         Button {
                             popover.pivotShown.toggle()

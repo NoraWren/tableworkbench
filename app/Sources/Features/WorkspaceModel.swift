@@ -79,6 +79,14 @@ public final class WorkspaceModel: ObservableObject {
             }.value
 
             for file in result.files {
+                if let existing = entries.first(where: {
+                    $0.url == file.url && $0.sheetName == file.sheetName
+                }) {
+                    file.session.close()
+                    selection = existing.id
+                    continue
+                }
+
                 let entry = Entry(
                     url: file.url,
                     session: file.session,
