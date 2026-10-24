@@ -111,6 +111,27 @@ func run() throws {
     check("GBK 列名不乱码", gbkOpened.session.columns[0].displayName == "客户名称")
     check("GBK 编码被记录", gbkOpened.encoding == .gb18030)
 
+    // 3000 列文件：数据层应能打开，不改写、不超时
+    let wide = URL(fileURLWithPath: "../bench-data/wide-3000.csv")
+    if FileManager.default.fileExists(atPath: wide.path) {
+        let openedWide = try FileImporter.open(url: wide)
+        check("3000 列文件可打开", openedWide.session.columns.count == 3000)
+        check("3000 列文件行数 200", openedWide.session.rowCount == 200)
+    } else {
+        print("SKIP  3000 列文件不存在，先跑 make-bench-data")
+    }
+
+    // 伪装成 CSV 的二进制文件必须被拒绝
+    let fakeCSV = working.appendingPathComponent("fake.csv")
+    try Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01]).write(to: fakeCSV)
+    var rejected = false
+    do {
+        _ = try FileImporter.open(url: fakeCSV)
+    } catch {
+        rejected = true
+    }
+    check("伪装成 CSV 的二进制被拒绝", rejected)
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {

@@ -45,7 +45,8 @@ struct ContentView: View {
                     } label: {
                         Label("检查器", systemImage: "sidebar.right")
                     }
-                    .help("显示或隐藏检查器")
+                    .help("显示或隐藏检查器（Command+Option+I）")
+                    .keyboardShortcut("i", modifiers: [.command, .option])
                 }
             }
         }

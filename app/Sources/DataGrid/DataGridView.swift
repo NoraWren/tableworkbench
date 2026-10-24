@@ -2,9 +2,82 @@ import SwiftUI
 import AppKit
 import DuckDBKit
 
+/// 固定在左侧的行号条，不参与横向滚动，纵向跟随主表的可见行。
+final class RowNumbersView: NSView {
+    private weak var tableView: NSTableView?
+    private weak var scrollView: NSScrollView?
+
+    override var isFlipped: Bool { true }
+
+    func attach(tableView: NSTableView, scrollView: NSScrollView) {
+        self.tableView = tableView
+        self.scrollView = scrollView
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(contentDidScroll),
+            name: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc private func contentDidScroll() {
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.controlBackgroundColor.setFill()
+        bounds.fill()
+
+        guard let tableView, let scrollView else { return }
+        let headerHeight = max(24, tableView.headerView?.frame.height ?? 24)
+        let clip = scrollView.contentView.bounds
+        let rowHeight = tableView.rowHeight + tableView.intercellSpacing.height
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        let headerAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .medium),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+
+        ("#" as NSString).draw(
+            at: NSPoint(x: bounds.width - 22, y: max(0, (headerHeight - 14) / 2)),
+            withAttributes: headerAttributes
+        )
+
+        let visible = tableView.rows(in: clip)
+        if visible.length > 0 {
+            for row in visible.location..<(visible.location + visible.length) {
+                let rowRect = tableView.rect(ofRow: row)
+                let y = rowRect.minY - clip.minY
+                let cellRect = NSRect(x: 0, y: y, width: bounds.width - 8, height: max(rowHeight, rowRect.height))
+                let text = String(row + 1) as NSString
+                let size = text.size(withAttributes: attributes)
+                text.draw(
+                    at: NSPoint(x: cellRect.maxX - size.width, y: cellRect.midY - size.height / 2),
+                    withAttributes: attributes
+                )
+            }
+        }
+
+        NSColor.separatorColor.setFill()
+        NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height).fill()
+        NSColor.separatorColor.setFill()
+        NSRect(x: 0, y: headerHeight - 1, width: bounds.width, height: 1).fill()
+    }
+}
+
 public struct DataGridView: NSViewRepresentable {
     public static let maxVisibleColumns = 2000
     public static let defaultVisibleColumns = 200
+    public static let rowHeaderWidth: CGFloat = 56
 
     public let columns: [ColumnInfo]
     public let rowCount: Int
@@ -32,7 +105,11 @@ public struct DataGridView: NSViewRepresentable {
         return dataSource
     }
 
-    public func makeNSView(context: Context) -> NSScrollView {
+    public func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+        let rowNumbers = RowNumbersView()
+        rowNumbers.translatesAutoresizingMaskIntoConstraints = false
+
         let tableView = NSTableView()
         tableView.usesAlternatingRowBackgroundColors = true
         tableView.rowSizeStyle = .medium
@@ -41,19 +118,35 @@ public struct DataGridView: NSViewRepresentable {
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
         tableView.dataSource = context.coordinator
         tableView.delegate = context.coordinator
-        rebuildColumns(tableView)
 
         let scrollView = NSScrollView()
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        return scrollView
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(rowNumbers)
+        container.addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            rowNumbers.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            rowNumbers.topAnchor.constraint(equalTo: container.topAnchor),
+            rowNumbers.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            rowNumbers.widthAnchor.constraint(equalToConstant: Self.rowHeaderWidth),
+            scrollView.leadingAnchor.constraint(equalTo: rowNumbers.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        rowNumbers.attach(tableView: tableView, scrollView: scrollView)
+        context.coordinator.contentTableView = tableView
+        context.coordinator.rowNumbersView = rowNumbers
+        rebuildColumns(tableView)
+        return container
     }
 
-    public func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let tableView = scrollView.documentView as? NSTableView else { return }
+    public func updateNSView(_ view: NSView, context: Context) {
         let dataSource = context.coordinator
         dataSource.provider = provider
         dataSource.onError = onError
@@ -61,23 +154,17 @@ public struct DataGridView: NSViewRepresentable {
         let changed = dataSource.columns != visibleColumns || dataSource.rowCount != rowCount
         dataSource.columns = visibleColumns
         dataSource.rowCount = rowCount
-        if changed {
+
+        if changed, let tableView = dataSource.contentTableView {
             rebuildColumns(tableView)
         }
+        dataSource.rowNumbersView?.needsDisplay = true
     }
 
     private func rebuildColumns(_ tableView: NSTableView) {
         for column in tableView.tableColumns {
             tableView.removeTableColumn(column)
         }
-
-        let rowNumber = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("row-number"))
-        rowNumber.title = "#"
-        rowNumber.width = 56
-        rowNumber.minWidth = 44
-        rowNumber.maxWidth = 80
-        tableView.addTableColumn(rowNumber)
-
         for info in visibleColumns {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(info.displayName))
             column.title = info.displayName

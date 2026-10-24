@@ -95,6 +95,12 @@ DuckDBKit 抛底层错误；Features 把它映射成 ImportError，带 userMessa
 
 左栏 List，中栏 VStack（网格加可折叠底栏占位），右栏用 inspector 修饰符。左右栏的显示状态用 @AppStorage 持久化。
 
+### D10 行号用自绘视图，不用第二张表
+
+试过把第二个 NSTableView 放进独立的 NSScrollView 当行头，结果这张表在滚动视图里拿不到稳定尺寸：宽度被撑到 86pt、高度算出负值，行号被裁成一位数字，横向滚动还会带着偏移。改成自绘的 RowNumbersView：宽度固定 56pt，监听主表 clip view 的 bounds 变化后重绘，行号位置用 tableView.rect(ofRow:) 减去 clip 原点算。表头高度用固定值，分隔线自己画。
+
+代价是表头高度和行高要自己对齐，收益是行号完全不参与横向滚动，也不引入第二套数据源。
+
 ### 模块与依赖方向
 
     TableWorkbenchApp  →  Features  →  DataGrid

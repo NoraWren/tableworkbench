@@ -1,12 +1,15 @@
 import AppKit
 import DuckDBKit
 
+
 public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     var columns: [ColumnInfo] = []
     var rowCount: Int = 0
     var blockSize: Int = QuerySessionDefaults.blockSize
     var provider: ((Int, Int) throws -> TableBlock)?
     var onError: ((Error) -> Void)?
+    weak var contentTableView: NSTableView?
+    weak var rowNumbersView: NSView?
 
     private let cache = BlockCache(capacity: 8)
     private let cellIdentifier = NSUserInterfaceItemIdentifier("data-cell")

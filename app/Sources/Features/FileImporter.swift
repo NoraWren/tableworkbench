@@ -37,6 +37,14 @@ public enum FileImporter {
         let sample = try EncodingDetector.readSample(of: url)
         let encoding = EncodingDetector.detect(sample: sample)
 
+        if encoding != .utf16LE && encoding != .utf16BE, isLikelyBinary(sample) {
+            throw ImportError(
+                userMessage: "看起来不是文本文件",
+                technicalDetail: "样本里含 NUL 字节或大量控制字符",
+                recoverySuggestion: "确认文件没有被改成 .csv 后缀，或者换一个文件试试。"
+            )
+        }
+
         let sampleText: String
         switch encoding {
         case .utf8:
@@ -63,5 +71,18 @@ public enum FileImporter {
         let readableURL = try TextFileTranscoder.transcodeIfNeeded(source: url, encoding: encoding)
         let session = try DuckDBSession.open(url: readableURL, format: format)
         return OpenedFile(url: url, session: session, encoding: encoding)
+    }
+
+    /// NUL 字节或控制字符比例过高，基本可以判定为二进制文件。
+    static func isLikelyBinary(_ data: Data) -> Bool {
+        guard !data.isEmpty else { return false }
+        if data.contains(0) { return true }
+        var control = 0
+        for byte in data.prefix(64 * 1024) {
+            if byte < 0x09 || (byte > 0x0D && byte < 0x20) || byte == 0x7F {
+                control += 1
+            }
+        }
+        return Double(control) / Double(min(data.count, 64 * 1024)) > 0.02
     }
 }

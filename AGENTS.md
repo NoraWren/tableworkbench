@@ -215,6 +215,7 @@ xcodebuild -scheme TableWorkbench -configuration Debug build
 - **中文 CSV 多半是 GBK。** DuckDB 默认按 UTF-8 读，遇到 GBK 直接报错或乱码，必须先探测编码再转，见 R-IMP-04。
 - **Excel 是脏数据源。** 合并单元格、公式、日期序列号、隐藏行都会让自动推断出错。v0.1 只读单元格的值，公式取缓存值，拿不到就留空并标记。
 - **NSTableView 的列宽和复用。** view-based 模式下 cell view 必须复用，列宽计算要在数据变化时批量更新，别在 `viewFor` 里做重活。
+- **行号不要用第二张 NSTableView。** 放进 NSScrollView 当行头时尺寸不可控，会被裁成一位数字。用自绘视图跟随主表滚动，见 design D10。
 - **Gatekeeper。** 没签名的 dmg 用户打不开，会直接劝退。签名账号要提前一个月办。
 - **不要为了快而跳过基准。** 这个项目的全部叙事建在三个数字上，数字虚了，项目就没了。
 - **没有 Xcode 时，SwiftUI 宏不可用。** 命令行工具链缺 SwiftUIMacros，@State、@Bindable 都编译不过。当前代码用 ObservableObject 加 @StateObject 绕开，装好 Xcode 后可以换回 @Observable。
