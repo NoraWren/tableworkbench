@@ -169,7 +169,8 @@ AIClient                协议适配、上下文构造、流式解析（旁路�
 2. 读 [docs/requirements/12-decisions-risks.md](docs/requirements/12-decisions-risks.md) 的"已验证事实"和"待验证事实"两张表。上一轮验过的东西不要重验，没验过的不要当结论用。
 3. 如果写代码，先看 [docs/requirements/11-milestones.md](docs/requirements/11-milestones.md) 里当前周对应的那一条，只看那一条。
 4. 要动代码，先跑 openspec list 看有没有进行中的 change；没有就按 [openspec/config.yaml](openspec/config.yaml) 的规则新建一个，提案里引用需求编号。
-5. 需要拍板的三件事在最后，其余按文档默认值推进，不用回头问。
+5. 界面验收按 [docs/manual-verification.md](docs/manual-verification.md) 逐条过，发版按 [docs/release-checklist.md](docs/release-checklist.md) 走。
+6. 需要拍板的三件事在最后，其余按文档默认值推进，不用回头问。
 
 ## 8. 工作规则
 
