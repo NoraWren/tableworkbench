@@ -32,6 +32,10 @@ let package = Package(
             dependencies: ["Features", "DuckDBKit"]
         ),
         .executableTarget(
+            name: "TableWorkbenchScrollBench",
+            dependencies: ["Features", "DataGrid", "DuckDBKit"]
+        ),
+        .executableTarget(
             name: "TableWorkbenchTests",
             dependencies: ["DuckDBKit", "Features", "DataGrid"]
         )
