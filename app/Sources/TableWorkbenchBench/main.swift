@@ -36,6 +36,7 @@ var filterColumn: String?
 var filterValue: String?
 var repeatCount = 1
 var sqlStatement: String?
+var warmCache = false
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -48,6 +49,9 @@ while argumentIndex < arguments.count {
         }
     case "--desc":
         sortAscending = false
+        argumentIndex += 1
+    case "--warm-cache":
+        warmCache = true
         argumentIndex += 1
     case "--sql":
         if argumentIndex + 1 < arguments.count {
@@ -82,6 +86,19 @@ do {
     let start = Date()
     let opened = try FileImporter.open(url: url)
     let openSeconds = Date().timeIntervalSince(start)
+    if warmCache {
+        let cacheStart = Date()
+        var ready = false
+        while Date().timeIntervalSince(cacheStart) < 120 {
+            if ParquetCache.shared.cachedURL(for: url, variant: opened.encoding.rawValue) != nil {
+                ready = true
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        print(String(format: "缓存生成: %.3f 秒 (成功: %@)", Date().timeIntervalSince(cacheStart), ready ? "是" : "否"))
+    }
+
     let firstBlock = try opened.session.block(offset: 0, size: 1)
     let firstRow = firstBlock.rows.first ?? []
     let firstCell: String? = firstRow.first ?? nil

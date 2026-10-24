@@ -29,6 +29,19 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     }
 
     public static func open(url: URL, format: CSVFormat) throws -> DuckDBSession {
+        try open(source: .csv(url, format))
+    }
+
+    public static func openParquet(url: URL) throws -> DuckDBSession {
+        try open(source: .parquet(url))
+    }
+
+    private enum Source {
+        case csv(URL, CSVFormat)
+        case parquet(URL)
+    }
+
+    private static func open(source: Source) throws -> DuckDBSession {
         do {
             let fileManager = FileManager.default
             let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent("tableworkbench-\(UUID().uuidString)", isDirectory: true)
@@ -38,15 +51,21 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             try connection.execute("SET memory_limit='1200MB'")
             try connection.execute("SET temp_directory='\(temporaryDirectory.path.replacingOccurrences(of: "'", with: "''"))'")
 
-            let path = url.path.replacingOccurrences(of: "'", with: "''")
-            let delimiter = format.delimiter == "\t" ? "\t" : String(format.delimiter)
-            let delimiterLiteral = delimiter.replacingOccurrences(of: "'", with: "''")
-            let header = format.hasHeader ? "true" : "false"
-
-            let createTable = """
-            CREATE TABLE "__base" AS
-            SELECT * FROM read_csv_auto('\(path)', delim='\(delimiterLiteral)', header=\(header), auto_detect=true)
-            """
+            let createTable: String
+            switch source {
+            case .csv(let url, let format):
+                let path = url.path.replacingOccurrences(of: "'", with: "''")
+                let delimiter = format.delimiter == "\t" ? "\t" : String(format.delimiter)
+                let delimiterLiteral = delimiter.replacingOccurrences(of: "'", with: "''")
+                let header = format.hasHeader ? "true" : "false"
+                createTable = """
+                CREATE TABLE "__base" AS
+                SELECT * FROM read_csv_auto('\(path)', delim='\(delimiterLiteral)', header=\(header), auto_detect=true)
+                """
+            case .parquet(let url):
+                let path = url.path.replacingOccurrences(of: "'", with: "''")
+                createTable = "CREATE TABLE \"__base\" AS SELECT * FROM read_parquet('\(path)')"
+            }
             try connection.execute(createTable)
             try connection.execute("CREATE VIEW \"data\" AS SELECT * FROM \"__base\"")
 

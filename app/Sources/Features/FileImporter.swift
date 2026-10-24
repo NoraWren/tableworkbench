@@ -5,11 +5,13 @@ public struct OpenedFile: Sendable {
     public let url: URL
     public let session: QuerySession
     public let encoding: TextEncoding
+    public let usedCache: Bool
 
-    public init(url: URL, session: QuerySession, encoding: TextEncoding) {
+    public init(url: URL, session: QuerySession, encoding: TextEncoding, usedCache: Bool = false) {
         self.url = url
         self.session = session
         self.encoding = encoding
+        self.usedCache = usedCache
     }
 }
 
@@ -68,9 +70,22 @@ public enum FileImporter {
         }
 
         let format = CSVSniffer.sniff(sample: sampleText, fileExtension: ext)
+        let variant = encoding.rawValue
+
+        if let cached = ParquetCache.shared.cachedURL(for: url, variant: variant) {
+            let session = try DuckDBSession.openParquet(url: cached)
+            return OpenedFile(url: url, session: session, encoding: encoding, usedCache: true)
+        }
+
         let readableURL = try TextFileTranscoder.transcodeIfNeeded(source: url, encoding: encoding)
         let session = try DuckDBSession.open(url: readableURL, format: format)
-        return OpenedFile(url: url, session: session, encoding: encoding)
+        ParquetCache.shared.scheduleConversion(
+            sourceKey: url,
+            readableURL: readableURL,
+            format: format,
+            variant: variant
+        )
+        return OpenedFile(url: url, session: session, encoding: encoding, usedCache: false)
     }
 
     /// NUL 字节或控制字符比例过高，基本可以判定为二进制文件。

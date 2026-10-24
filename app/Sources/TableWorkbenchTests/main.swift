@@ -228,6 +228,48 @@ func run() throws {
     let totalAfterFilter = try query.session.runSQL("SELECT count(*) FROM data")
     check("data 视图不受筛选影响", totalAfterFilter.rows.first?.first == "6")
 
+    // Parquet 缓存
+    let cacheDirectory = working.appendingPathComponent("cache")
+    let parquetCache = ParquetCache(baseDirectory: cacheDirectory, limitBytes: 100 * 1024 * 1024)
+    ParquetCache.shared = parquetCache
+
+    let cacheCSV = working.appendingPathComponent("cache-test.csv")
+    try "name,amount\nx,1\ny,2\n".write(to: cacheCSV, atomically: true, encoding: .utf8)
+
+    let firstCacheOpen = try FileImporter.open(url: cacheCSV)
+    check("首次打开未命中缓存", !firstCacheOpen.usedCache)
+
+    var cachedFile: URL?
+    for _ in 0..<100 {
+        if let found = parquetCache.cachedURL(for: cacheCSV, variant: TextEncoding.utf8.rawValue) {
+            cachedFile = found
+            break
+        }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    check("后台生成 Parquet 缓存", cachedFile != nil)
+
+    let secondCacheOpen = try FileImporter.open(url: cacheCSV)
+    check("二次打开命中缓存", secondCacheOpen.usedCache)
+    check("缓存行列一致", secondCacheOpen.session.rowCount == 2 && secondCacheOpen.session.columns.count == 2)
+    check("缓存首行正确", try secondCacheOpen.session.block(offset: 0, size: 1).rows.first?.first == "x")
+
+    Thread.sleep(forTimeInterval: 1.2)
+    try "name,amount\nx,1\ny,2\nz,3\n".write(to: cacheCSV, atomically: true, encoding: .utf8)
+    check("修改文件后旧缓存失效", parquetCache.cachedURL(for: cacheCSV, variant: TextEncoding.utf8.rawValue) == nil)
+    let modifiedOpen = try FileImporter.open(url: cacheCSV)
+    check("修改后回退 CSV", !modifiedOpen.usedCache && modifiedOpen.session.rowCount == 3)
+
+    let evictDirectory = working.appendingPathComponent("evict-cache")
+    let evictCache = ParquetCache(baseDirectory: evictDirectory, limitBytes: 10)
+    let oldFile = evictDirectory.appendingPathComponent("old.parquet")
+    let newFile = evictDirectory.appendingPathComponent("new.parquet")
+    try Data(repeating: 1, count: 100).write(to: oldFile)
+    try Data(repeating: 1, count: 100).write(to: newFile)
+    try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-100)], ofItemAtPath: oldFile.path)
+    evictCache.evictIfNeeded(keeping: newFile)
+    check("超过上限删除最旧缓存", !FileManager.default.fileExists(atPath: oldFile.path) && FileManager.default.fileExists(atPath: newFile.path))
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {
