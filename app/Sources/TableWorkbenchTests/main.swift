@@ -343,6 +343,24 @@ func run() throws {
     check("金额中位数 150", abs((amountStats.median ?? 0) - 150) < 0.001)
     check("直方图 20 桶且计数 6", amountStats.histogram.count == 20 && amountStats.histogram.reduce(0) { $0 + $1.count } == 6)
 
+    // 检查器的均值必须和 SQL AVG 对得上
+    let avgSQL = try query.session.runSQL("SELECT avg(amount) FROM data")
+    let avgRaw: String? = avgSQL.rows.first?[0] ?? nil
+    let avgValue = Double(avgRaw ?? "") ?? -1
+    check("均值与 SQL AVG 一致", abs(avgValue - (amountStats.mean ?? 0)) < 0.001)
+
+    // 透视结果必须能用手写 GROUP BY 复现
+    let groupSQL = try query.session.runSQL("SELECT city, sum(amount) FROM data GROUP BY city ORDER BY city")
+    let groupPairs = Set(groupSQL.rows.compactMap { row -> String? in
+        guard row.count == 2, let city = row[0], let total = row[1] else { return nil }
+        return "\(city)=\(Double(total) ?? 0)"
+    })
+    let pivotPairs = Set(pivotSum.rows.compactMap { row -> String? in
+        guard row.count == 2, let city = row[0], let total = row[1] else { return nil }
+        return "\(city)=\(Double(total) ?? 0)"
+    })
+    check("透视与手写 GROUP BY 一致", groupPairs == pivotPairs)
+
     let cityStats = try query.session.columnStats(column: "city")
     let nameStats = try query.session.columnStats(column: "name")
     check("文本最短长度 1", nameStats.minLength == 1)
