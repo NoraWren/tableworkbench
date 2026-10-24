@@ -84,7 +84,13 @@ struct ChartPanel: View {
         .onAppear {
             // 记住上一次的选择；第一次打开时跳过看起来像主键的首列，避免一上手就撞基数保护。
             if state.groupColumn.isEmpty {
-                let candidate = columns.dropFirst().first(where: { !$0.kind.isNumeric }) ?? columns.first
+                let categoryWords = ["区域", "地区", "城市", "省份", "渠道", "产品", "状态", "类型", "类别", "分类", "等级", "分组"]
+                let preferred = columns.first { column in
+                    !column.kind.isNumeric && categoryWords.contains { column.displayName.contains($0) }
+                }
+                let candidate = preferred
+                    ?? columns.dropFirst().first(where: { !$0.kind.isNumeric })
+                    ?? columns.first
                 state.groupColumn = candidate?.name ?? ""
             }
             if state.measureColumn.isEmpty { state.measureColumn = numericColumns.first?.name ?? "" }
