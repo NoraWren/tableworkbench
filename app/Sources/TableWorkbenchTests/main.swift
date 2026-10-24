@@ -231,6 +231,13 @@ func run() throws {
     do { _ = try query.session.runSQL("DROP TABLE data") } catch { dropRejected = true }
     check("SQL 写语句被拒绝", dropRejected)
 
+    let beforeWriteAttempt = SHA256.hash(data: try Data(contentsOf: queryCSV))
+    var deleteRejected = false
+    do { _ = try query.session.runSQL("DELETE FROM data") } catch { deleteRejected = true }
+    check("SQL DELETE 被拒绝", deleteRejected)
+    let afterWriteAttempt = SHA256.hash(data: try Data(contentsOf: queryCSV))
+    check("拒绝写语句后源文件不变", beforeWriteAttempt == afterWriteAttempt)
+
     var syntaxRejected = false
     do { _ = try query.session.runSQL("SELEC * FROM data") } catch { syntaxRejected = true }
     check("SQL 语法错误被拒绝", syntaxRejected)
