@@ -53,24 +53,22 @@
 
 ## 当前进度
 
-全部条目都是"已定义"或"待验证"，代码尚未开始。当前阻塞项是安装 Xcode。
+v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入、分块网格、排序筛选、SQL 抽屉、透视、列检查器、导出和 dmg 打包。Xcode 仍未安装，SwiftUI 宏和 XCTest 用替代方案绕开，逐条验收框只在整条需求验完后才勾。
 
-各文件的完成情况，改完代码后在这里更新：
+| 文件 | 条目数 | 状态 |
+|---|---|---|
+| 01-product-scope.md | 7 | 已定义 |
+| 02-data-import.md | 7 | 已实现，验收框待同步 |
+| 03-data-grid.md | 8 | 已实现，R-GRID-08 已完成 |
+| 04-sql-console.md | 5 | 已实现，验收框待同步 |
+| 05-pivot-table.md | 4 | 已实现，验收框待同步 |
+| 06-column-inspector.md | 4 | 已实现，验收框待同步 |
+| 07-export.md | 4 | 已实现，验收框待同步 |
+| 08-performance.md | 7 | 基准已有记录，滚动帧率待补测 |
+| 09-app-shell.md | 7 | 已实现，验收框待同步 |
+| 10-packaging-release.md | 6 | dmg 已出，签名与公证缺账号 |
+| 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
+| 12-decisions-risks.md | 14 | 3 项待拍板 |
+| 13-ai-analysis.md | 15 | 已定义，v0.2 |
 
-| 文件 | 条目数 | 已完成 | 状态 |
-|---|---|---|---|
-| 01-product-scope.md | 7 | 0 | 已定义 |
-| 02-data-import.md | 7 | 0 | 部分待验证 |
-| 03-data-grid.md | 8 | 0 | 已定义 |
-| 04-sql-console.md | 5 | 0 | 已定义 |
-| 05-pivot-table.md | 4 | 0 | 已定义 |
-| 06-column-inspector.md | 4 | 0 | 已定义 |
-| 07-export.md | 4 | 0 | 已定义 |
-| 08-performance.md | 7 | 0 | 已定义 |
-| 09-app-shell.md | 7 | 0 | 已定义 |
-| 10-packaging-release.md | 6 | 0 | 已定义 |
-| 11-milestones.md | 10 | 0 | 前置条件未就绪 |
-| 12-decisions-risks.md | 13 | 0 | 3 项待拍板 |
-| 13-ai-analysis.md | 15 | 0 | 已定义，v0.2 |
-
-共 97 条需求。
+共 98 条需求。

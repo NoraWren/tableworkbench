@@ -37,4 +37,7 @@ public extension QuerySession {
 
 public enum QuerySessionDefaults {
     public static let blockSize = 5000
+    /// 超过这个列数就只默认显示前 200 列，其余由用户启用。
+    public static let maxVisibleColumns = 2000
+    public static let defaultVisibleColumns = 200
 }

@@ -257,9 +257,9 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                let shownColumns = DataGridView.visibleColumns(from: entry.displayColumns)
+                let shownColumns = model.shownColumns(for: entry)
                 DataGridView(
-                    columns: entry.displayColumns,
+                    columns: shownColumns,
                     rowCount: entry.resultCount,
                     sorts: entry.sort,
                     provider: { offset, size in
@@ -421,25 +421,39 @@ private struct InspectorView: View {
                     }
                     Section("列") {
                         ForEach(entry.columns, id: \.name) { column in
-                            Button {
-                                model.loadStats(entryID: entry.id, column: column.name)
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(column.displayName)
-                                            .fontWeight(model.statsColumn == column.name ? .semibold : .regular)
-                                        Text(column.typeName)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if model.statsColumn == column.name, model.columnStats != nil {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.tint)
+                            HStack(spacing: 6) {
+                                Button {
+                                    model.loadStats(entryID: entry.id, column: column.name)
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(column.displayName)
+                                                .fontWeight(model.statsColumn == column.name ? .semibold : .regular)
+                                            Text(column.typeName)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        if model.statsColumn == column.name, model.columnStats != nil {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.tint)
+                                        }
                                     }
                                 }
+                                .buttonStyle(.plain)
+
+                                if entry.displayColumns.count > DataGridView.maxVisibleColumns {
+                                    let shown = model.isColumnShown(entryID: entry.id, column: column.name)
+                                    Button {
+                                        model.toggleColumn(entryID: entry.id, column: column.name)
+                                    } label: {
+                                        Image(systemName: shown ? "eye" : "eye.slash")
+                                            .foregroundStyle(shown ? .secondary : .tertiary)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(shown ? "隐藏这一列" : "显示这一列")
+                                }
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                     if let stats = model.columnStats {

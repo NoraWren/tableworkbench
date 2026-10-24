@@ -11,9 +11,10 @@
 
 - [x] 2.1 DataGridView 暴露 visibleColumns(from:)，视图与取数共用
 - [x] 2.2 ContentView 把可见列传给 provider，验证 3000 列表格有数据
+- [x] 2.3 检查器列清单加眼睛按钮，隐藏列 0 后表头从列 1 开始，再点恢复
 
 ## 3. 验证
 
 - [x] 3.1 在开发用 bundle 里打开 wide-3000.csv，确认不卡死、无 NULL
 - [x] 3.2 跑 TableWorkbenchTests 全部通过
-- [ ] 3.3 列面板启用第 2100 列（依赖后续改动）
+- [x] 3.3 测试覆盖启用第 2100 列，验证共 201 列且排在最后

@@ -122,6 +122,13 @@ func run() throws {
         let wideBlock = try openedWide.session.block(offset: 0, size: 2, columns: shown)
         check("宽表只取显示列", wideBlock.rows.first?.count == 3)
         check("宽表显示列有值", wideBlock.rows.first?.first == "v0_0")
+
+        let wideColumns = openedWide.session.displayColumns
+        check("宽表默认 200 列", ColumnVisibility.shown(wideColumns, enabled: nil).count == 200)
+        let enabled = ColumnVisibility.toggled(wideColumns, enabled: nil, column: "列2099")
+        let withExtra = ColumnVisibility.shown(wideColumns, enabled: enabled)
+        check("启用第 2100 列", withExtra.count == 201 && withExtra.contains { $0.name == "列2099" })
+        check("启用后排在第 201 位", withExtra.last?.name == "列2099")
         openedWide.session.close()
     } else {
         print("SKIP  3000 列文件不存在，先跑 make-bench-data")

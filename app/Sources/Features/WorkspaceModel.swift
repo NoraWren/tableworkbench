@@ -51,12 +51,33 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var statsColumn: String?
     @Published public private(set) var isLoadingStats = false
     @Published public private(set) var lastExportMessage: String?
+    /// 宽表里用户手动启用的列，按文件记。默认只显示前 200 列。
+    @Published private var enabledColumns: [UUID: Set<String>] = [:]
 
     public init() {}
 
     public var selectedEntry: Entry? {
         guard let selection else { return nil }
         return entries.first { $0.id == selection }
+    }
+
+    /// 表格实际显示的列。普通表原样返回，宽表按启用集合裁剪。
+    public func shownColumns(for entry: Entry) -> [ColumnInfo] {
+        ColumnVisibility.shown(entry.displayColumns, enabled: enabledColumns[entry.id])
+    }
+
+    public func isColumnShown(entryID: UUID, column: String) -> Bool {
+        guard let entry = entries.first(where: { $0.id == entryID }) else { return false }
+        return shownColumns(for: entry).contains { $0.name == column }
+    }
+
+    public func toggleColumn(entryID: UUID, column: String) {
+        guard let entry = entries.first(where: { $0.id == entryID }) else { return }
+        enabledColumns[entryID] = ColumnVisibility.toggled(
+            entry.displayColumns,
+            enabled: enabledColumns[entryID],
+            column: column
+        )
     }
 
     public func open(urls: [URL], sheetName: String? = nil) {

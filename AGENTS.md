@@ -24,7 +24,9 @@
 
 ## 3. 当前状态
 
-2026-10-23：只有文档，没有代码，仓库还没有第一个提交。
+2026-10-24：v0.1 主体已经能跑。CSV/TSV/Parquet/xlsx 导入、分块网格、排序筛选、SQL 抽屉、透视、列检查器、导出和 dmg 打包都已实现，bench-data 下有 500MB 与 3000 列两份测试数据。
+
+未完成的主要部分：Developer ID 签名与公证（缺账号）、滚动帧率实测、30 秒演示录屏。没有 Xcode 时，界面层用 ObservableObject 加 @StateObject，测试用 TableWorkbenchTests 可执行程序跑断言。
 
 本机环境（已实测）：
 
@@ -42,7 +44,7 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 xcodebuild -version
 ```
 
-没有这一步，任何 SwiftUI 代码都编译不了，`swift build` 也只能验证不依赖 AppKit 的部分。
+装好 Xcode 后，把上面的绕行方案换回 @Observable 与 Swift Testing，并补 `xcodebuild` 构建验证。
 
 ## 4. 技术栈（已锁定）
 

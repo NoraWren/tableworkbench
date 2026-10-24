@@ -75,8 +75,8 @@ final class RowNumbersView: NSView {
 }
 
 public struct DataGridView: NSViewRepresentable {
-    public static let maxVisibleColumns = 2000
-    public static let defaultVisibleColumns = 200
+    public static let maxVisibleColumns = QuerySessionDefaults.maxVisibleColumns
+    public static let defaultVisibleColumns = QuerySessionDefaults.defaultVisibleColumns
     public static let rowHeaderWidth: CGFloat = 56
 
     public let columns: [ColumnInfo]
@@ -207,10 +207,7 @@ public struct DataGridView: NSViewRepresentable {
 
     /// 超过上限时只留前 200 列。取数据也按这份裁剪后的列表查，宽表才不会整表卡住。
     public static func visibleColumns(from columns: [ColumnInfo]) -> [ColumnInfo] {
-        if columns.count > maxVisibleColumns {
-            return Array(columns.prefix(defaultVisibleColumns))
-        }
-        return columns
+        ColumnVisibility.shown(columns, enabled: nil)
     }
 
     private func preferredWidth(for info: ColumnInfo) -> CGFloat {
