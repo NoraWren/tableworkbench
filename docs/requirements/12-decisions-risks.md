@@ -20,6 +20,7 @@
 | duckdb-swift 1.1.3 的调用链是 Database(store:) → connect() → query(sql) → ResultSet.column(at:).cast(to:) | 探针程序编译并运行通过 |
 | cast(to: String.self) 只对 VARCHAR 列有值，其他类型返回 nil，所以块查询在 SQL 里统一 CAST AS VARCHAR | 探针实测 |
 | Command Line Tools 下 .xctest 打包会在 codesign 与 CopySwiftLibs 失败，本项目改用测试可执行程序 | swift test 实测 |
+| 分块 CSV 导出在 328 万行上超过 80 秒，rowid 区间过滤每块仍全表扫；COPY 是唯一快路径 | 基准程序实测 |
 | macOS 14 之后未打包的进程无法可靠激活，open -a 的多文件事件也收不到 | 实测，改用开发用 .app bundle |
 | SwiftUI WindowGroup 在 open 事件下会开多个窗口，Window 场景只保留一个 | 实测 |
 | 开发期 Bundle ID 暂用 info.ideatech.tableworkbench | Info.plist，正式名待 R-DEC-06 |
@@ -163,6 +164,16 @@
 - 代价：极少数问题需要用户手动加大样本才能问清楚。
 - 推翻条件：无。
 - 依赖：R-AI-10、R-AI-09
+
+## R-DEC-14 大导出暂不做进度与取消
+
+- 优先级：P2
+- 状态：已定
+- 结论：导出继续用 DuckDB 的 COPY，一条语句写完；不提供百分比进度，取消只在开始前生效。
+- 理由：尝试按 rowid 区间分块写 CSV，328 万行跑了 80 秒以上，原因是每块都触发全表扫描，比 COPY 慢一个数量级。为了进度条牺牲十倍速度不值得。
+- 代价：R-EXP-02 的进度和取消没有完全满足，大导出期间界面只能显示"正在导出"。
+- 推翻条件：duckdb-swift 暴露查询进度或 interrupt，或者改为后台进程导出。
+- 依赖：R-EXP-02
 
 ## 风险清单
 

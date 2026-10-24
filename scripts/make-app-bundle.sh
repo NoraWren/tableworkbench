@@ -11,6 +11,7 @@ rm -rf "$bundle"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$bin" "$bundle/Contents/MacOS/TableWorkbench"
 cp "$root/app/Resources/Info.plist" "$bundle/Contents/Info.plist"
+cp "$root/app/Resources/AppIcon.icns" "$bundle/Contents/Resources/AppIcon.icns"
 
 codesign --force --deep --sign - "$bundle" >/dev/null 2>&1 || true
 echo "$bundle"
