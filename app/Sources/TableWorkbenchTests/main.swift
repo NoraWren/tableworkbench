@@ -636,6 +636,19 @@ func run() throws {
     MainActor.assumeIsolated {
         for entry in model.entries { entry.session.close() }
     }
+
+    // 一次打开多个文件：只进一次左栏，选中第一个
+    let multiModel = MainActor.assumeIsolated { WorkspaceModel() }
+    MainActor.assumeIsolated { multiModel.open(urls: [switchA, switchB]) }
+    waitFor { multiModel.entries.count == 2 }
+    let multiFirst = MainActor.assumeIsolated { multiModel.entries.first?.id }
+    check("多选打开选中第一个", MainActor.assumeIsolated { multiModel.selection == multiFirst })
+    MainActor.assumeIsolated { multiModel.open(urls: [switchA]) }
+    waitFor { !multiModel.isLoading }
+    check("重复打开不新增条目", MainActor.assumeIsolated { multiModel.entries.count == 2 })
+    MainActor.assumeIsolated {
+        for entry in multiModel.entries { entry.session.close() }
+    }
 }
 
 do {
