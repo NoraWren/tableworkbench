@@ -649,6 +649,20 @@ func run() throws {
     MainActor.assumeIsolated {
         for entry in multiModel.entries { entry.session.close() }
     }
+
+    let fiveFiles = (1...5).map { working.appendingPathComponent("five-\($0).csv") }
+    for (index, url) in fiveFiles.enumerated() {
+        try "name,amount\nn\(index),1\n".write(to: url, atomically: true, encoding: .utf8)
+    }
+    let fiveModel = MainActor.assumeIsolated { WorkspaceModel() }
+    MainActor.assumeIsolated { fiveModel.open(urls: fiveFiles) }
+    waitFor { fiveModel.entries.count == 5 }
+    check("一次打开 5 个文件", MainActor.assumeIsolated { fiveModel.entries.count == 5 })
+    let fiveFirst = MainActor.assumeIsolated { fiveModel.entries.first?.id }
+    check("5 个文件选中第一个", MainActor.assumeIsolated { fiveModel.selection == fiveFirst })
+    MainActor.assumeIsolated {
+        for entry in fiveModel.entries { entry.session.close() }
+    }
 }
 
 do {
