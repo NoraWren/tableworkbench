@@ -98,6 +98,8 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var rowDetail: RowDetail?
     @Published public private(set) var chartData: ChartData?
     @Published public private(set) var isBuildingChart = false
+    @Published public private(set) var autoCharts: [ChartData]?
+    @Published public private(set) var isAnalyzing = false
     /// 宽表里用户手动启用的列，按文件记。默认只显示前 200 列。
     @Published private var enabledColumns: [UUID: Set<String>] = [:]
 
@@ -342,6 +344,53 @@ public final class WorkspaceModel: ObservableObject {
 
     public func clearChart() {
         chartData = nil
+    }
+
+    /// 一键分析：自己挑分组列与度量列，连着生成几张柱状图。
+    public func runAutoAnalysis(entryID: UUID) {
+        guard let entry = entries.first(where: { $0.id == entryID }) else { return }
+        let session = entry.session
+        let columns = entry.columns
+        isAnalyzing = true
+        autoCharts = nil
+        error = nil
+
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> ([ChartData], ImportError?) in
+                let specs = AutoAnalysis.plan(columns: columns) { name in
+                    (try? session.distinctCount(column: name)) ?? Int.max
+                }
+                guard !specs.isEmpty else {
+                    let hasNumeric = columns.contains { $0.kind.isNumeric }
+                    return ([], ImportError(
+                        userMessage: hasNumeric ? "没有可以分组的列" : "没有数值列",
+                        technicalDetail: nil,
+                        recoverySuggestion: hasNumeric
+                            ? "表格里需要一个取值不多的文本列，比如区域、状态。"
+                            : "先用计算列造一个数值列，再试一键分析。"
+                    ))
+                }
+                var charts: [ChartData] = []
+                for spec in specs {
+                    do {
+                        let result = try session.pivot(spec: spec.pivotSpec)
+                        charts.append(ChartData.build(result: result, spec: spec))
+                    } catch {
+                        // 单张图失败不影响其余的，最后统一报错。
+                        return (charts, ImportError.wrap(error, step: "一键分析"))
+                    }
+                }
+                return (charts, nil)
+            }.value
+
+            autoCharts = outcome.0.isEmpty ? nil : outcome.0
+            error = outcome.1
+            isAnalyzing = false
+        }
+    }
+
+    public func clearAutoAnalysis() {
+        autoCharts = nil
     }
 
     public func addComputedColumn(entryID: UUID, name: String, expression: String) {

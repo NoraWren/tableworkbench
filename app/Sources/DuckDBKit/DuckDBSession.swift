@@ -12,6 +12,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     private var computedColumns: [(name: String, expression: String)] = []
     /// 按列缓存统计，配 generation 判断是否失效。
     private var statsCache: [String: (generation: Int, stats: ColumnStats)] = [:]
+    private var distinctCache: [String: (generation: Int, count: Int)] = [:]
     private var database: Database?
     private var connection: Connection?
     private let temporaryDirectory: URL
@@ -213,6 +214,30 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             )
         }
         computedColumns.append((trimmedName, trimmedExpression))
+    }
+
+    /// 去重计数，按列缓存；换筛选后 generation 变化会重新算。
+    public func distinctCount(column: String) throws -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else {
+            throw ImportError(userMessage: "数据源已关闭", technicalDetail: nil, recoverySuggestion: "重新打开文件。")
+        }
+        if let cached = distinctCache[column], cached.generation == generation {
+            return cached.count
+        }
+        let table = hasResultTable ? "\"__result\"" : "\"__base\""
+        do {
+            let result = try connection.query(
+                "SELECT count(DISTINCT \(SQLBuilder.quoteIdentifier(column))) FROM \(table)"
+            )
+            let count = Int(result.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+            distinctCache[column] = (generation, count)
+            return count
+        } catch {
+            throw ImportError(userMessage: "统计失败", technicalDetail: String(describing: error), recoverySuggestion: "换一列再试。")
+        }
     }
 
     public func columnStats(column: String) throws -> ColumnStats {

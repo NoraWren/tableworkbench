@@ -206,6 +206,14 @@ struct ContentView: View {
                                 popover.chartShown = false
                             }
                         }
+
+                        Button {
+                            model.runAutoAnalysis(entryID: entry.id)
+                        } label: {
+                            Label("一键分析", systemImage: "wand.and.stars")
+                        }
+                        .help("自动挑几列，生成一组图")
+                        .disabled(model.isAnalyzing)
                     }
 
                     Button {
@@ -345,7 +353,14 @@ struct ContentView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if let chart = model.chartData {
+        if let charts = model.autoCharts {
+            AutoAnalysisView(charts: charts) {
+                model.clearAutoAnalysis()
+            }
+        } else if model.isAnalyzing {
+            ProgressView("正在分析…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let chart = model.chartData {
             ChartView(data: chart) {
                 model.clearChart()
             }

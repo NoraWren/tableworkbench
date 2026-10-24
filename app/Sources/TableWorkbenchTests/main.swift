@@ -411,6 +411,35 @@ func run() throws {
     check("空结果不画图", emptyChart.isEmpty && emptyChart.maxValue == 0)
     check("数值千分位格式", ChartData.format(12345.6789) == "12,345.68")
 
+    // 一键分析：挑列、基数过滤、兜底
+    let autoColumns = [
+        ColumnInfo(name: "order", displayName: "订单号", typeName: "VARCHAR", kind: .text),
+        ColumnInfo(name: "region", displayName: "区域", typeName: "VARCHAR", kind: .text),
+        ColumnInfo(name: "channel", displayName: "渠道", typeName: "VARCHAR", kind: .text),
+        ColumnInfo(name: "amount", displayName: "金额", typeName: "DOUBLE", kind: .double),
+        ColumnInfo(name: "qty", displayName: "数量", typeName: "BIGINT", kind: .integer)
+    ]
+    let autoSpecs = AutoAnalysis.plan(columns: autoColumns) { name in
+        switch name {
+        case "order": return 3_282_000
+        case "region": return 5
+        case "channel": return 4
+        default: return 1
+        }
+    }
+    check("一键分析跳过订单号", autoSpecs.allSatisfy { $0.groupColumn != "order" })
+    check("一键分析挑出两个维度", autoSpecs.map(\.groupColumn) == ["region", "channel"])
+    check("一键分析度量选金额", autoSpecs.first?.value.column == "amount")
+    let noneSpecs = AutoAnalysis.plan(columns: autoColumns) { _ in 100 }
+    check("基数全超限时不出图", noneSpecs.isEmpty)
+    check("没有数值列不出图", AutoAnalysis.plan(columns: [autoColumns[1]]) { _ in 3 }.isEmpty)
+
+    let cityDistinct = try query.session.distinctCount(column: "city")
+    let cityDistinctSQL = Int(try query.session.runSQL("SELECT count(DISTINCT city) FROM data").rows.first?[0] ?? "") ?? -1
+    check("去重计数与 SQL 一致", cityDistinct == cityDistinctSQL)
+    let singlePlan = AutoAnalysis.plan(columns: query.session.columns) { _ in 6 }
+    check("小表一键分析出图", singlePlan.contains { $0.groupColumn == "city" } && singlePlan.first?.value.column == "amount")
+
     let cityStats = try query.session.columnStats(column: "city")
     let nameStats = try query.session.columnStats(column: "name")
     check("文本最短长度 1", nameStats.minLength == 1)

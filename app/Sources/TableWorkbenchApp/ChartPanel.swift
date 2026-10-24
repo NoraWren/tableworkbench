@@ -98,9 +98,48 @@ struct ChartPanel: View {
     }
 }
 
+/// 一键分析的结果：几张图竖排，每张一个固定高度。
+struct AutoAnalysisView: View {
+    let charts: [ChartData]
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text("一键分析")
+                    .font(.headline)
+                Text("\(charts.count) 张图 · 自动挑了 \(charts.map(\.title).joined(separator: "、"))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer()
+                Button("返回数据", action: onClose)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 14) {
+                    ForEach(charts, id: \.title) { chart in
+                        ChartView(data: chart, compact: true) {}
+                            .frame(height: 320)
+                            .background(Color(nsColor: .textBackgroundColor).opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .padding(14)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// 图表结果区：四种图都用 Canvas 画，不引第三方图表库。
 struct ChartView: View {
     let data: ChartData
+    /// 放在多图列表里时用紧凑模式：不显示“返回数据”，高度交给外层。
+    var compact = false
     let onClose: () -> Void
 
     var body: some View {
@@ -117,7 +156,9 @@ struct ChartView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("返回数据", action: onClose)
+                if !compact {
+                    Button("返回数据", action: onClose)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -140,7 +181,7 @@ struct ChartView: View {
                 .padding(18)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: compact ? nil : .infinity)
     }
 
     private var accent: Color { .accentColor }

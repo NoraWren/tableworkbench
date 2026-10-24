@@ -18,6 +18,8 @@ public protocol QuerySession: AnyObject, Sendable {
     func pivot(spec: PivotSpec) throws -> SQLResult
     /// 统计一列。源表跟随当前筛选。
     func columnStats(column: String) throws -> ColumnStats
+    /// 一列有多少个不同取值，用于挑分组维度。
+    func distinctCount(column: String) throws -> Int
     /// 导出当前视图，返回导出行数。
     func export(to url: URL, format: ExportFormat) throws -> Int
     /// 按范围导出，返回导出行数。
@@ -39,6 +41,11 @@ public extension QuerySession {
     /// 默认忽略范围，替身会话用不到三种口径。
     func export(to url: URL, format: ExportFormat, scope: ExportScope) throws -> Int {
         try export(to: url, format: format)
+    }
+
+    /// 替身会话没有真实数据，返回一个大数，让挑列逻辑跳过它。
+    func distinctCount(column: String) throws -> Int {
+        Int.max
     }
 }
 
