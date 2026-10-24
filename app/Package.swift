@@ -22,10 +22,11 @@ let package = Package(
             ]
         ),
         .target(name: "DataGrid", dependencies: ["DuckDBKit"]),
+        .target(name: "ChartUI", dependencies: ["DuckDBKit"]),
         .target(name: "Features", dependencies: ["DuckDBKit"]),
         .executableTarget(
             name: "TableWorkbenchApp",
-            dependencies: ["Features", "DataGrid", "DuckDBKit"]
+            dependencies: ["Features", "DataGrid", "DuckDBKit", "ChartUI"]
         ),
         .executableTarget(
             name: "TableWorkbenchBench",
@@ -34,6 +35,10 @@ let package = Package(
         .executableTarget(
             name: "TableWorkbenchScrollBench",
             dependencies: ["Features", "DataGrid", "DuckDBKit"]
+        ),
+        .executableTarget(
+            name: "TableWorkbenchSnapshot",
+            dependencies: ["ChartUI", "DuckDBKit"]
         ),
         .executableTarget(
             name: "TableWorkbenchTests",

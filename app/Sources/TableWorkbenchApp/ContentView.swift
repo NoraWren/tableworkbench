@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 import Features
 import DataGrid
 import DuckDBKit
+import ChartUI
 
 private final class ComputedColumnState: ObservableObject {
     @Published var name = ""

@@ -41,3 +41,7 @@
 ## 风险
 
 关键词表覆盖不到英文列名（region、channel）。英文列名走“低基数文本列”的兜底，但需要探测更多列，速度会慢一点。
+
+## 离屏渲染验收
+
+界面自动化对改过 bundle id 的进程绑不上时，用 `swift run TableWorkbenchSnapshot <输出.png>` 把图表列表离屏渲染成图片检查排版。图表视图因此拆到了 ChartUI 这个库目标，App 与快照工具共用一份代码。注意 ImageRenderer 不绘制 ScrollView 与 Button，快照里直接渲染列表内容。

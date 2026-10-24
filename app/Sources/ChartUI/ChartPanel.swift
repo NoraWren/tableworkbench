@@ -1,24 +1,32 @@
 import SwiftUI
 import DuckDBKit
 
-final class ChartPanelState: ObservableObject {
-    @Published var kind: ChartKind = .bar
-    @Published var groupColumn = ""
-    @Published var measureColumn = ""
-    @Published var aggregate: PivotAggregate = .sum
+public final class ChartPanelState: ObservableObject {
+    @Published public var kind: ChartKind = .bar
+    @Published public var groupColumn = ""
+    @Published public var measureColumn = ""
+    @Published public var aggregate: PivotAggregate = .sum
+
+    public init() {}
 }
 
 /// 建图配置：分组列 + 度量列 + 聚合 + 图表类型。
-struct ChartPanel: View {
+public struct ChartPanel: View {
     let columns: [ColumnInfo]
     @ObservedObject var state: ChartPanelState
     let onRun: (ChartSpec) -> Void
+
+    public init(columns: [ColumnInfo], state: ChartPanelState, onRun: @escaping (ChartSpec) -> Void) {
+        self.columns = columns
+        self.state = state
+        self.onRun = onRun
+    }
 
     private var numericColumns: [ColumnInfo] {
         columns.filter { $0.kind.isNumeric }
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("图表").font(.headline)
             Text("按一列分组，把另一列算成一个数，再画出来")
@@ -99,11 +107,16 @@ struct ChartPanel: View {
 }
 
 /// 一键分析的结果：几张图竖排，每张一个固定高度。
-struct AutoAnalysisView: View {
+public struct AutoAnalysisView: View {
     let charts: [ChartData]
     let onClose: () -> Void
 
-    var body: some View {
+    public init(charts: [ChartData], onClose: @escaping () -> Void) {
+        self.charts = charts
+        self.onClose = onClose
+    }
+
+    public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text("一键分析")
@@ -136,13 +149,19 @@ struct AutoAnalysisView: View {
 }
 
 /// 图表结果区：四种图都用 Canvas 画，不引第三方图表库。
-struct ChartView: View {
+public struct ChartView: View {
     let data: ChartData
     /// 放在多图列表里时用紧凑模式：不显示“返回数据”，高度交给外层。
     var compact = false
     let onClose: () -> Void
 
-    var body: some View {
+    public init(data: ChartData, compact: Bool = false, onClose: @escaping () -> Void) {
+        self.data = data
+        self.compact = compact
+        self.onClose = onClose
+    }
+
+    public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(data.title)
