@@ -5,10 +5,12 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/bench-data"
 target_mb="500"
 if printenv BENCH_MB >/dev/null 2>&1; then target_mb="$(printenv BENCH_MB)"; fi
+target_name="${target_mb}mb.csv"
+if printenv BENCH_NAME >/dev/null 2>&1; then target_name="$(printenv BENCH_NAME)"; fi
 
 mkdir -p "$out"
 
-python3 - "$out" "$target_mb" <<'PY'
+python3 - "$out" "$target_mb" "$target_name" <<'PY'
 import csv
 import os
 import random
@@ -16,6 +18,7 @@ import sys
 
 out = sys.argv[1]
 target_mb = int(sys.argv[2])
+target_name = sys.argv[3]
 target_bytes = target_mb * 1024 * 1024
 random.seed(20261023)
 
@@ -30,7 +33,7 @@ header = [
     "状态", "销售", "城市", "省份", "下单日期", "付款时间", "备注", "折扣", "币种", "批次",
 ]
 
-path = os.path.join(out, "500mb.csv")
+path = os.path.join(out, target_name)
 rows = 0
 with open(path, "w", newline="", encoding="utf-8") as handle:
     writer = csv.writer(handle)
