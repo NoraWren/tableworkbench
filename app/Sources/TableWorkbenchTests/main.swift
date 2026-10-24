@@ -280,6 +280,16 @@ func run() throws {
     let nullStats = try opened.session.columnStats(column: "备注")
     check("空值统计 2", nullStats.nullCount == 2)
 
+    let mixedURL = working.appendingPathComponent("mixed.csv")
+    try "code\n100\n200\n—\n300\n".write(to: mixedURL, atomically: true, encoding: .utf8)
+    let mixed = try FileImporter.open(url: mixedURL)
+    let mixedStats = try mixed.session.columnStats(column: "code")
+    check("混合列按文本", mixedStats.kind == .text)
+    check("混合列数字 3 行", mixedStats.numericCount == 3 && mixedStats.conflictCount == 1)
+    check("混合列反例", mixedStats.nonNumericExamples == ["—"])
+    check("纯文本不误报", cityStats.numericCount == 0)
+    check("数值列无冲突", amountStats.conflictCount == 0)
+
     let exportURL = working.appendingPathComponent("export.csv")
     _ = try query.session.export(to: exportURL, format: .csv)
     let exported = try FileImporter.open(url: exportURL)

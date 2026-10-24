@@ -474,6 +474,22 @@ private struct InspectorView: View {
         if let deviation = stats.standardDeviation {
             LabeledContent("标准差", value: format(deviation))
         }
+        if stats.kind == .text, stats.numericCount > 0, stats.conflictCount > 0 {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("类型冲突")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Text("\(stats.numericCount) 行是数字，\(stats.conflictCount) 行不是，整列按文本处理")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(stats.nonNumericExamples, id: \.self) { example in
+                    Text("反例：\(example)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
         if !stats.histogram.isEmpty {
             let maxCount = max(1, stats.histogram.map(\.count).max() ?? 1)
             HStack(alignment: .bottom, spacing: 2) {

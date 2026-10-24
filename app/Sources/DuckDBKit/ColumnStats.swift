@@ -47,6 +47,8 @@ public struct ColumnStats: Sendable {
     public let topValues: [TopValue]
     public let histogram: [HistogramBucket]
     public let timeBuckets: [TimeBucket]
+    public let numericCount: Int
+    public let nonNumericExamples: [String]
 
     public init(
         column: String,
@@ -62,7 +64,9 @@ public struct ColumnStats: Sendable {
         standardDeviation: Double?,
         topValues: [TopValue] = [],
         histogram: [HistogramBucket] = [],
-        timeBuckets: [TimeBucket] = []
+        timeBuckets: [TimeBucket] = [],
+        numericCount: Int = 0,
+        nonNumericExamples: [String] = []
     ) {
         self.column = column
         self.typeName = typeName
@@ -78,6 +82,12 @@ public struct ColumnStats: Sendable {
         self.topValues = topValues
         self.histogram = histogram
         self.timeBuckets = timeBuckets
+        self.numericCount = numericCount
+        self.nonNumericExamples = nonNumericExamples
+    }
+
+    public var conflictCount: Int {
+        max(0, totalRows - nullCount - numericCount)
     }
 
     public var nullRate: Double {

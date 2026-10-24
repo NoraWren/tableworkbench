@@ -286,6 +286,29 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 }
             }
 
+            var numericCount = nonNull
+            var nonNumericExamples: [String] = []
+            if info.kind == .text, nonNull > 0 {
+                let numericQuery = try connection.query("""
+                SELECT count(*) FROM \(table)
+                WHERE \(identifier) IS NOT NULL AND TRY_CAST(\(identifier) AS DOUBLE) IS NOT NULL
+                """)
+                numericCount = Int(numericQuery.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+                if numericCount > 0 && numericCount < nonNull {
+                    let examples = try connection.query("""
+                    SELECT CAST(\(identifier) AS VARCHAR) FROM \(table)
+                    WHERE \(identifier) IS NOT NULL AND TRY_CAST(\(identifier) AS DOUBLE) IS NULL
+                    LIMIT 2
+                    """)
+                    let exampleColumn = examples.column(at: 0).cast(to: String.self)
+                    for index in 0..<Int(examples.rowCount) {
+                        if let value = exampleColumn[DBInt(index)] {
+                            nonNumericExamples.append(value)
+                        }
+                    }
+                }
+            }
+
             var timeBuckets: [TimeBucket] = []
             if info.kind == .date || info.kind == .timestamp {
                 let timeQuery = try connection.query("""
@@ -317,7 +340,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 standardDeviation: deviation,
                 topValues: topValues,
                 histogram: histogram,
-                timeBuckets: timeBuckets
+                timeBuckets: timeBuckets,
+                numericCount: numericCount,
+                nonNumericExamples: nonNumericExamples
             )
         } catch let error as ImportError {
             throw error
