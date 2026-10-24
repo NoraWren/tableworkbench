@@ -7,26 +7,29 @@ public struct OpenedFile: Sendable {
     public let encoding: TextEncoding
     public let usedCache: Bool
     public let cacheVariant: String
+    public let sheetName: String?
 
     public init(
         url: URL,
         session: QuerySession,
         encoding: TextEncoding,
         usedCache: Bool = false,
-        cacheVariant: String = ""
+        cacheVariant: String = "",
+        sheetName: String? = nil
     ) {
         self.url = url
         self.session = session
         self.encoding = encoding
         self.usedCache = usedCache
         self.cacheVariant = cacheVariant
+        self.sheetName = sheetName
     }
 }
 
 public enum FileImporter {
     public static let supportedExtensions: Set<String> = ["csv", "tsv", "tab", "xlsx"]
 
-    public static func open(url: URL) throws -> OpenedFile {
+    public static func open(url: URL, sheetName: String? = nil) throws -> OpenedFile {
         let ext = url.pathExtension.lowercased()
         guard supportedExtensions.contains(ext) else {
             throw ImportError(
@@ -37,7 +40,7 @@ public enum FileImporter {
         }
 
         if ext == "xlsx" {
-            return try openXLSX(url: url)
+            return try openXLSX(url: url, sheetName: sheetName)
         }
 
         guard FileManager.default.isReadableFile(atPath: url.path) else {
@@ -100,21 +103,29 @@ public enum FileImporter {
         return OpenedFile(url: url, session: session, encoding: encoding, usedCache: false, cacheVariant: variant)
     }
 
-    private static func openXLSX(url: URL) throws -> OpenedFile {
+    private static func openXLSX(url: URL, sheetName: String?) throws -> OpenedFile {
         let sheets = try XLSXConverter.sheets(at: url)
         guard let first = sheets.first else {
             throw ImportError(userMessage: "工作簿里没有工作表", technicalDetail: nil, recoverySuggestion: "检查文件内容。")
         }
+        let selected = sheetName.flatMap { name in sheets.first { $0.name == name } } ?? first
 
-        let variant = "xlsx:\(first.name)"
+        let variant = "xlsx:\(selected.name)"
         if let cached = ParquetCache.shared.cachedURL(for: url, variant: variant) {
             let session = try DuckDBSession.openParquet(url: cached)
-            return OpenedFile(url: url, session: session, encoding: .utf8, usedCache: true, cacheVariant: variant)
+            return OpenedFile(
+                url: url,
+                session: session,
+                encoding: .utf8,
+                usedCache: true,
+                cacheVariant: variant,
+                sheetName: selected.name
+            )
         }
 
         let temporary = FileManager.default.temporaryDirectory
             .appendingPathComponent("tableworkbench-\(UUID().uuidString).csv")
-        let sheet = try XLSXConverter.convert(url: url, sheetName: first.name, destination: temporary)
+        let sheet = try XLSXConverter.convert(url: url, sheetName: selected.name, destination: temporary)
         let format = CSVFormat(delimiter: ",", hasHeader: true)
         let session = try DuckDBSession.open(url: temporary, format: format)
         ParquetCache.shared.scheduleConversion(
@@ -124,7 +135,14 @@ public enum FileImporter {
             variant: "xlsx:\(sheet)",
             cleanupAfterConversion: true
         )
-        return OpenedFile(url: url, session: session, encoding: .utf8, usedCache: false, cacheVariant: "xlsx:\(sheet)")
+        return OpenedFile(
+            url: url,
+            session: session,
+            encoding: .utf8,
+            usedCache: false,
+            cacheVariant: "xlsx:\(sheet)",
+            sheetName: sheet
+        )
     }
 
     /// NUL 字节或控制字符比例过高，基本可以判定为二进制文件。

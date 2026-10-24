@@ -9,20 +9,30 @@ public final class WorkspaceModel: ObservableObject {
         public let url: URL
         public let session: QuerySession
         public let encoding: TextEncoding
+        public let sheetName: String?
         public var sort: [SortSpec] = []
         public var filter: FilterGroup?
         public var resultCount: Int
         public var queryVersion: Int = 0
 
-        public init(id: UUID = UUID(), url: URL, session: QuerySession, encoding: TextEncoding) {
+        public init(
+            id: UUID = UUID(),
+            url: URL,
+            session: QuerySession,
+            encoding: TextEncoding,
+            sheetName: String? = nil
+        ) {
             self.id = id
             self.url = url
             self.session = session
             self.encoding = encoding
+            self.sheetName = sheetName
             self.resultCount = session.rowCount
         }
 
-        public var displayName: String { url.lastPathComponent }
+        public var displayName: String {
+            url.lastPathComponent + (sheetName.map { " · \($0)" } ?? "")
+        }
         public var rowCount: Int { session.rowCount }
         public var columns: [ColumnInfo] { session.columns }
     }
@@ -47,7 +57,7 @@ public final class WorkspaceModel: ObservableObject {
         return entries.first { $0.id == selection }
     }
 
-    public func open(urls: [URL]) {
+    public func open(urls: [URL], sheetName: String? = nil) {
         guard !urls.isEmpty else { return }
         isLoading = true
         error = nil
@@ -58,7 +68,7 @@ public final class WorkspaceModel: ObservableObject {
                 var firstError: ImportError?
                 for url in urls {
                     do {
-                        files.append(try FileImporter.open(url: url))
+                        files.append(try FileImporter.open(url: url, sheetName: urls.count == 1 ? sheetName : nil))
                     } catch let importError as ImportError {
                         if firstError == nil { firstError = importError }
                     } catch {
@@ -69,7 +79,12 @@ public final class WorkspaceModel: ObservableObject {
             }.value
 
             for file in result.files {
-                let entry = Entry(url: file.url, session: file.session, encoding: file.encoding)
+                let entry = Entry(
+                    url: file.url,
+                    session: file.session,
+                    encoding: file.encoding,
+                    sheetName: file.sheetName
+                )
                 entries.append(entry)
                 if selection == nil { selection = entry.id }
             }

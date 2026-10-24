@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Features
+import DuckDBKit
 
 @MainActor
 final class AppEnvironment {
@@ -19,6 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+
+        let limitGB = UserDefaults.standard.integer(forKey: "cacheLimitGB")
+        if limitGB > 0 {
+            ParquetCache.shared.setLimitBytes(Int64(limitGB) * 1024 * 1024 * 1024)
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             guard let window = NSApp.windows.first else { return }
             window.setFrameAutosaveName("TableWorkbench.MainWindow")
@@ -37,6 +43,10 @@ struct TableWorkbenchApp: App {
     @StateObject private var model = AppEnvironment.shared.model
 
     var body: some Scene {
+        Settings {
+            SettingsView()
+        }
+
         Window("本地表格工作台", id: "main") {
             ContentView(model: model)
                 .frame(minWidth: 900, minHeight: 600)

@@ -5,6 +5,13 @@ import Features
 import DataGrid
 import DuckDBKit
 
+private final class SheetPromptState: ObservableObject {
+    @Published var isPresented = false
+    @Published var url: URL?
+    @Published var sheets: [String] = []
+    @Published var selected = ""
+}
+
 private final class PopoverState: ObservableObject {
     @Published var filterShown = false
     @Published var pivotShown = false
@@ -16,6 +23,7 @@ struct ContentView: View {
     @AppStorage("sqlShown") private var sqlShown = false
     @StateObject private var popover = PopoverState()
     @StateObject private var sql = SQLState()
+    @StateObject private var sheetPrompt = SheetPromptState()
 
     var body: some View {
         NavigationSplitView {
@@ -103,8 +111,31 @@ struct ContentView: View {
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 360)
         }
         .dropDestination(for: URL.self) { urls, _ in
-            model.open(urls: urls)
+            handleOpen(urls: urls)
             return true
+        }
+        .sheet(isPresented: $sheetPrompt.isPresented) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("选择工作表").font(.headline)
+                Picker("工作表", selection: $sheetPrompt.selected) {
+                    ForEach(sheetPrompt.sheets, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
+                }
+                HStack {
+                    Button("取消") { sheetPrompt.isPresented = false }
+                    Spacer()
+                    Button("打开") {
+                        if let url = sheetPrompt.url {
+                            model.open(urls: [url], sheetName: sheetPrompt.selected)
+                        }
+                        sheetPrompt.isPresented = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(20)
+            .frame(width: 360)
         }
         .overlay(alignment: .bottom) {
             if let error = model.error {
@@ -197,13 +228,29 @@ struct ContentView: View {
         }
     }
 
+    private func handleOpen(urls: [URL]) {
+        guard urls.count == 1,
+              let url = urls.first,
+              url.pathExtension.lowercased() == "xlsx",
+              let sheets = try? XLSXConverter.sheets(at: url),
+              sheets.count > 1 else {
+            model.open(urls: urls)
+            return
+        }
+        sheetPrompt.url = url
+        sheetPrompt.sheets = sheets.map(\.name)
+        sheetPrompt.selected = sheets[0].name
+        sheetPrompt.isPresented = true
+    }
+
     private func exportPanel(entry: WorkspaceModel.Entry) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [
             UTType.commaSeparatedText,
             UTType(filenameExtension: "parquet")
         ].compactMap { $0 }
-        panel.nameFieldStringValue = "export.csv"
+        let defaultFormat = UserDefaults.standard.string(forKey: "defaultExportFormat") ?? "csv"
+        panel.nameFieldStringValue = "export.\(defaultFormat)"
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
             let format: ExportFormat = url.pathExtension.lowercased() == "parquet" ? .parquet : .csv
@@ -218,7 +265,7 @@ struct ContentView: View {
         panel.canChooseFiles = true
         panel.allowedContentTypes = ["csv", "tsv", "tab", "xlsx"].compactMap { UTType(filenameExtension: $0) }
         if panel.runModal() == .OK {
-            model.open(urls: panel.urls)
+            handleOpen(urls: panel.urls)
         }
     }
 }

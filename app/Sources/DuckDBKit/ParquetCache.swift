@@ -6,7 +6,7 @@ public final class ParquetCache: @unchecked Sendable {
     public static var shared = ParquetCache()
 
     public let baseDirectory: URL
-    public let limitBytes: Int64
+    public private(set) var limitBytes: Int64
     private let version = "v1"
     private let lock = NSLock()
     private var inFlight: Set<String> = []
@@ -104,6 +104,35 @@ public final class ParquetCache: @unchecked Sendable {
         try FileManager.default.moveItem(at: temporaryURL, to: finalURL)
         try? FileManager.default.setAttributes([.modificationDate: Foundation.Date()], ofItemAtPath: finalURL.path)
         evictIfNeeded(keeping: finalURL)
+    }
+
+    public func setLimitBytes(_ value: Int64) {
+        lock.lock()
+        limitBytes = max(0, value)
+        lock.unlock()
+        evictIfNeeded(keeping: nil)
+    }
+
+    public func clearAll() {
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(at: baseDirectory, includingPropertiesForKeys: nil) else { return }
+        for file in files where file.pathExtension == "parquet" || file.pathExtension == "tmp" {
+            try? fileManager.removeItem(at: file)
+        }
+    }
+
+    public func totalSizeBytes() -> Int64 {
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: baseDirectory,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        return files.reduce(Int64(0)) { total, file in
+            guard file.pathExtension == "parquet" else { return total }
+            let values = try? file.resourceValues(forKeys: [.fileSizeKey])
+            return total + Int64(values?.fileSize ?? 0)
+        }
     }
 
     public func evictIfNeeded(keeping current: URL?) {

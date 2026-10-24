@@ -340,6 +340,14 @@ func run() throws {
     evictCache.evictIfNeeded(keeping: newFile)
     check("超过上限删除最旧缓存", !FileManager.default.fileExists(atPath: oldFile.path) && FileManager.default.fileExists(atPath: newFile.path))
 
+    let limitDirectory = working.appendingPathComponent("limit-cache")
+    let limitCache = ParquetCache(baseDirectory: limitDirectory, limitBytes: 1_000)
+    try Data(repeating: 1, count: 100).write(to: limitDirectory.appendingPathComponent("a.parquet"))
+    try Data(repeating: 1, count: 100).write(to: limitDirectory.appendingPathComponent("b.parquet"))
+    check("缓存占用统计 200", limitCache.totalSizeBytes() == 200)
+    limitCache.setLimitBytes(10)
+    check("设置上限立即淘汰", limitCache.totalSizeBytes() == 0)
+
     // Excel 导入
     let fixture = URL(fileURLWithPath: "Tests/Fixtures/sample.xlsx")
     let xlsx = try FileImporter.open(url: fixture)
@@ -385,6 +393,11 @@ func run() throws {
         Thread.sleep(forTimeInterval: 0.1)
     }
     check("转换后删除临时 CSV", cleaned)
+
+    let secondSheet = try FileImporter.open(url: fixture, sheetName: "汇总")
+    check("指定工作表行数 1", secondSheet.session.rowCount == 1)
+    check("指定工作表首行华东", try secondSheet.session.block(offset: 0, size: 1).rows.first?.first == "华东")
+    check("工作表名记录", secondSheet.sheetName == "汇总")
 
     let badXLSX = working.appendingPathComponent("bad.xlsx")
     try "not an excel file".write(to: badXLSX, atomically: true, encoding: .utf8)
