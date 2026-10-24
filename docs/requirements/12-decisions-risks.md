@@ -201,7 +201,7 @@
 
 - 优先级：P0
 - 状态：待决策
-- 事实：打开 Parquet 时执行 CREATE TABLE “__base” AS SELECT * FROM read_parquet(...)，1000 万行要 2.15–3.51 秒，且随内存余量浮动；R-PERF-01 的预算是 3 秒，实测三次里一次达标。
+- 事实：打开 Parquet 时执行 CREATE TABLE “__base” AS SELECT * FROM read_parquet(...)，1000 万行 7 次实测 2.12–3.51 秒，中位数 2.65 秒，4 次在 3 秒内；R-PERF-01 的预算是 3 秒，只能算半数达标。
 - 候选做法：Parquet 源只建视图 CREATE VIEW “__base” AS SELECT * FROM read_parquet(...)。打开变成 DESCRIBE 加 count(*)，理论上 1000 万行在几百毫秒内完成。
 - 已发现的障碍：取块的语句按 rowid 区间筛选并排序，rowid 只对表有效，视图上没有这一列。改成视图必须换一种定位方式，比如 read_parquet 的 file_row_number，或者按块物化一段；两者都要重测深分页，不能顺手改。
 - 需要先验证：视图源上第 100 块（OFFSET 50 万行）能否保持 0.2 秒以内；筛选与排序建 __result 时会不会明显变慢；内存峰值是否下降。
