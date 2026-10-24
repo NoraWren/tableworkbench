@@ -526,18 +526,6 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         let started = Foundation.Date()
 
         do {
-            let distinctRows = try connection.query(
-                "SELECT count(*) FROM (SELECT DISTINCT \(rowSQL) FROM \(table)) AS t"
-            )
-            let rowCount = Int(distinctRows.column(at: 0).cast(to: Int64.self)[0] ?? 0)
-            guard rowCount <= 5000 else {
-                throw ImportError(
-                    userMessage: "行维度太多了",
-                    technicalDetail: "去重后有 \(rowCount) 行，上限 5000",
-                    recoverySuggestion: "换一个基数更低的字段，或先加筛选。"
-                )
-            }
-
             var selectParts = [rowSelect]
             if spec.columns.isEmpty {
                 for value in spec.values {
@@ -586,8 +574,18 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 }
             }
 
-            let sql = "SELECT \(selectParts.joined(separator: ", ")) FROM \(table) GROUP BY \(rowSQL) ORDER BY \(rowAliases)"
-            return try executeSelect(sql, connection: connection, started: started)
+            // 多取一行用来判断基数：超过上限就报错，不再单独跑一遍 DISTINCT 计数。
+            let rowLimit = 5001
+            let sql = "SELECT \(selectParts.joined(separator: ", ")) FROM \(table) GROUP BY \(rowSQL) ORDER BY \(rowAliases) LIMIT \(rowLimit)"
+            let result = try executeSelect(sql, connection: connection, started: started)
+            guard result.rowCount <= 5000 else {
+                throw ImportError(
+                    userMessage: "行维度太多了",
+                    technicalDetail: "去重后超过 5000 行",
+                    recoverySuggestion: "换一个基数更低的字段，或先加筛选。"
+                )
+            }
+            return result
         } catch let error as ImportError {
             throw error
         } catch {
