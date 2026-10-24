@@ -2,12 +2,14 @@
 
 只收 MIT、Apache-2.0、BSD 三种许可证。新增依赖先在这里登记，再改 Package.swift。
 
-## 已定
+## 已引入
 
 | 名称 | 版本 | 许可证 | 用途 | 备注 |
 |---|---|---|---|---|
-| duckdb/duckdb-swift | v1.1.3 或 main 某 commit，待定 | MIT | 查询引擎绑定 | 官方 Swift 包，SPM 接入。注意：正式 tag 只到 2024-11 的 v1.1.3，之后只有 dev 快照，见 R-DEC 补充 |
-| CoreOffice/CoreXLSX | 待定 | Apache-2.0 | 读 xlsx | 只在 R-DEC-05 走路线 B 时引入；最后推送 2024-03，维护状态一般 |
+| duckdb/duckdb-swift | 1.1.3 | MIT | 查询引擎绑定 | 官方 Swift 包；正式 tag 停在 2024-11，后续只有 dev 快照 |
+| CoreOffice/CoreXLSX | 0.14.2 | Apache-2.0 | 读取 xlsx 的工作簿与工作表路径 | 只用于元数据，单元格解析走自写的流式 XMLParser |
+| weichsel/ZIPFoundation | 0.9.20 | MIT | 解压 xlsx 容器 | CoreXLSX 的依赖，同时被直接使用 |
+| maxdesiatov/XMLCoder | 0.14.0 | MIT | CoreXLSX 的 XML 解码 | 传递依赖 |
 
 ## 登记规则
 

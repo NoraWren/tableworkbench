@@ -200,6 +200,9 @@ cd app && swift run TableWorkbench
 open build/TableWorkbench.app
 open -a build/TableWorkbench.app file1.csv file2.csv
 
+# 打包 dmg（没有签名证书时是 ad-hoc，Gatekeeper 会拦）
+./scripts/make-dmg.sh
+
 # 完整构建（需要 Xcode）
 xcodebuild -scheme TableWorkbench -configuration Debug build
 
