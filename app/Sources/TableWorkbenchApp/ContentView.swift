@@ -245,6 +245,12 @@ struct ContentView: View {
                 HStack {
                     Button("取消") { sheetPrompt.isPresented = false }
                     Spacer()
+                    Button("全部导入（\(sheetPrompt.sheets.count) 个工作表）") {
+                        if let url = sheetPrompt.url {
+                            model.open(url: url, sheetNames: sheetPrompt.sheets)
+                        }
+                        sheetPrompt.isPresented = false
+                    }
                     Button("打开") {
                         if let url = sheetPrompt.url {
                             model.open(urls: [url], sheetName: sheetPrompt.selected)

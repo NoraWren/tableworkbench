@@ -128,7 +128,18 @@ public final class WorkspaceModel: ObservableObject {
     }
 
     public func open(urls: [URL], sheetName: String? = nil) {
-        guard !urls.isEmpty else { return }
+        let requests = urls.map { ($0, urls.count == 1 ? sheetName : nil) }
+        open(requests: requests)
+    }
+
+    /// 把一个工作簿里的多个工作表一次全部打开，每个工作表单独一条。
+    public func open(url: URL, sheetNames: [String]) {
+        let requests = sheetNames.map { (url, Optional($0)) }
+        open(requests: requests)
+    }
+
+    private func open(requests: [(URL, String?)]) {
+        guard !requests.isEmpty else { return }
         isLoading = true
         error = nil
 
@@ -136,9 +147,9 @@ public final class WorkspaceModel: ObservableObject {
             let result = await Task.detached(priority: .userInitiated) { () -> (files: [OpenedFile], error: ImportError?) in
                 var files: [OpenedFile] = []
                 var firstError: ImportError?
-                for url in urls {
+                for (url, sheet) in requests {
                     do {
-                        files.append(try FileImporter.open(url: url, sheetName: urls.count == 1 ? sheetName : nil))
+                        files.append(try FileImporter.open(url: url, sheetName: sheet))
                     } catch let importError as ImportError {
                         if firstError == nil { firstError = importError }
                     } catch {
