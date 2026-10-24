@@ -468,6 +468,27 @@ func run() throws {
     check("复制不带表头", NSPasteboard.general.string(forType: .string) == "a\tb")
     UserDefaults.standard.set(true, forKey: "copyIncludesHeader")
 
+    // SQL 历史
+    let historySuite = "tableworkbench.history.\(UUID().uuidString)"
+    let historyDefaults = UserDefaults(suiteName: historySuite)!
+    let history = SQLHistoryStore(defaults: historyDefaults, key: "test")
+    history.record("SELECT 1")
+    history.record("SELECT 2")
+    check("历史两条", history.entries.count == 2)
+    check("历史最新在前", history.entries.first?.sql == "SELECT 2")
+    history.record("SELECT 2")
+    check("历史去重", history.entries.count == 2)
+    for index in 0..<205 {
+        history.record("SELECT \(index)")
+    }
+    check("历史上限 200", history.entries.count == 200)
+    check("历史搜索", !history.search("SELECT 20").isEmpty)
+    let reloadedHistory = SQLHistoryStore(defaults: historyDefaults, key: "test")
+    check("历史持久化", reloadedHistory.entries.count == 200 && reloadedHistory.entries.first?.sql == "SELECT 204")
+    history.clear()
+    check("历史清空", history.entries.isEmpty && SQLHistoryStore(defaults: historyDefaults, key: "test").entries.isEmpty)
+    historyDefaults.removePersistentDomain(forName: historySuite)
+
     // 连续开关的内存波动（用小文件跑 20 次，验证释放路径）
     let memoryBefore = residentMB()
     for _ in 0..<20 {

@@ -4,6 +4,7 @@ import DuckDBKit
 
 @MainActor
 public final class WorkspaceModel: ObservableObject {
+    public let sqlHistory = SQLHistoryStore()
     public struct Entry: Identifiable {
         public let id: UUID
         public let url: URL
@@ -185,6 +186,7 @@ public final class WorkspaceModel: ObservableObject {
 
             if let result = outcome.0 {
                 sqlResult = result
+                sqlHistory.record(trimmed)
             } else {
                 error = outcome.1
             }

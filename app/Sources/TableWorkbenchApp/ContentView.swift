@@ -42,7 +42,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if sqlShown {
                     Divider()
-                    SQLEditor(state: sql, isRunning: model.isRunningSQL) {
+                    SQLEditor(state: sql, isRunning: model.isRunningSQL, history: model.sqlHistory) {
                         if let entry = model.selectedEntry {
                             model.runSQL(entryID: entry.id, sql: sql.text)
                         }
