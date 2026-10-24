@@ -394,10 +394,15 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
         do {
             try connection.execute(sql)
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+            switch format {
+            case .csv:
+                try moveWithBOM(from: temporary, to: url)
+            case .parquet:
+                if FileManager.default.fileExists(atPath: url.path) {
+                    try FileManager.default.removeItem(at: url)
+                }
+                try FileManager.default.moveItem(at: temporary, to: url)
             }
-            try FileManager.default.moveItem(at: temporary, to: url)
             return resultCount
         } catch {
             try? FileManager.default.removeItem(at: temporary)
@@ -406,6 +411,27 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 technicalDetail: String(describing: error),
                 recoverySuggestion: "确认目标目录有写权限，换一个位置再试。"
             )
+        }
+    }
+
+    /// Excel 只有看到 BOM 才按 UTF-8 打开 CSV，这里在文件头补上，正文按 1MB 流式拷贝。
+    private func moveWithBOM(from temporary: URL, to url: URL) throws {
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        FileManager.default.createFile(atPath: url.path, contents: Data([0xEF, 0xBB, 0xBF]))
+        let output = try FileHandle(forWritingTo: url)
+        let input = try FileHandle(forReadingFrom: temporary)
+        defer {
+            try? input.close()
+            try? output.close()
+            try? FileManager.default.removeItem(at: temporary)
+        }
+        try output.seekToEnd()
+        while true {
+            let chunk = try input.read(upToCount: 1 << 20) ?? Data()
+            if chunk.isEmpty { break }
+            try output.write(contentsOf: chunk)
         }
     }
 

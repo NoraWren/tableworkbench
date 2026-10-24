@@ -358,8 +358,11 @@ func run() throws {
 
     let exportURL = working.appendingPathComponent("export.csv")
     _ = try query.session.export(to: exportURL, format: .csv)
+    let csvPrefix = try Data(contentsOf: exportURL).prefix(3)
+    check("CSV 带 UTF-8 BOM", csvPrefix.elementsEqual([0xEF, 0xBB, 0xBF]))
     let exported = try FileImporter.open(url: exportURL)
     check("CSV 导出行数 6", exported.session.rowCount == 6)
+    check("CSV 导出可再次打开", try exported.session.block(offset: 0, size: 1).rows.first?.first == "a")
 
     let parquetURL = working.appendingPathComponent("export.parquet")
     _ = try query.session.export(to: parquetURL, format: .parquet)
