@@ -487,6 +487,24 @@ func run() throws {
     check("Parquet 首行有值", try importedParquet.session.block(offset: 0, size: 1).rows.first?.first != nil)
     importedParquet.session.close()
 
+    // Parquet 视图分支：小文件也强制走 __rid 路径，验证取块、筛选与 data 视图不暴露 __rid
+    DuckDBSession.parquetViewCellThreshold = 0
+    let viewOpened = try FileImporter.open(url: parquetURL)
+    check("视图分支行数 6", viewOpened.session.rowCount == 6)
+    check("视图分支首块有值", try viewOpened.session.block(offset: 0, size: 2).rows.first?.first != nil)
+    let lastBlock = try viewOpened.session.block(offset: 5, size: 1)
+    check("视图分支末块 1 行", lastBlock.rows.count == 1)
+    try viewOpened.session.apply(view: QueryView(sort: [SortSpec(column: "amount", ascending: false)]))
+    let maxAmount = Double(try viewOpened.session.runSQL("SELECT max(amount) FROM data").rows.first?[0] ?? "") ?? -1
+    let amountIndex = viewOpened.session.columns.firstIndex { $0.name == "amount" } ?? 0
+    let firstRow = try viewOpened.session.block(offset: 0, size: 1).rows.first ?? []
+    let firstAmount = Double(amountIndex < firstRow.count ? (firstRow[amountIndex] ?? "") : "") ?? -2
+    check("视图分支排序后首行最大", abs(firstAmount - maxAmount) < 0.001)
+    let starSQL = try viewOpened.session.runSQL("SELECT * FROM data LIMIT 1")
+    check("data 视图不含 __rid", starSQL.columns.count == 3 && starSQL.columns.allSatisfy { $0.name != "__rid" })
+    viewOpened.session.close()
+    DuckDBSession.parquetViewCellThreshold = 20_000_000
+
     try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
         FilterCondition(column: "city", op: .equal, value: "上海")
     ])))

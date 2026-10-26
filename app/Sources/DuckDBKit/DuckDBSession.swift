@@ -7,6 +7,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public let rowCount: Int
     public private(set) var resultCount: Int
     public private(set) var generation: Int = 0
+    /// 行数 × 列数超过这个值就保留 Parquet 视图，否则物化。测试里会调小来覆盖视图分支。
+    public static var parquetViewCellThreshold = 20_000_000
     private var view: QueryView = .empty
     private var hasResultTable = false
     private var computedColumns: [(name: String, expression: String)] = []
@@ -91,7 +93,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 let rows = Int(probe.column(at: 0).cast(to: Int64.self)[0] ?? 0)
                 let described = try connection.query("DESCRIBE SELECT * FROM read_parquet('\(path)')")
                 let columnCount = Int(described.rowCount)
-                let materialize = rows * max(1, columnCount) <= 20_000_000
+                let materialize = rows * max(1, columnCount) <= DuckDBSession.parquetViewCellThreshold
                 useParquetView = !materialize
                 if materialize {
                     createTable = "CREATE TABLE \"__base\" AS SELECT * FROM read_parquet('\(path)')"
