@@ -1,13 +1,14 @@
 # query-engine Specification
 
 ## Purpose
-描述从 CSV 或 Parquet 物化基础表时如何分配行号、如何按行号区间取块、排序筛选结果如何物化，以及资源边界是什么。
+
+描述打开文件后基础数据以什么形式存在（CSV 物化成表，Parquet 小表物化、大表留作视图），内部行号怎么分配与使用，排序筛选结果如何物化，以及 data 视图对外暴露哪些列。
 
 ## Requirements
 
-### Requirement: 从 Parquet 物化基础表
+### Requirement: 从 Parquet 读取基础数据
 
-缓存命中时，应用 SHALL 从 Parquet 创建基础表，并保持与 CSV 路径相同的列名、列顺序和行序。
+缓存命中时，应用 SHALL 从 Parquet 读取基础数据，并保持与 CSV 路径相同的列名、列顺序和行序。行数 × 列数不超过 2000 万时 SHALL 物化成表，超过时 SHALL 保留为视图，取块改用 file_row_number 区间过滤。
 
 #### Scenario: 缓存打开的行列一致
 - **WHEN** 同一个文件分别通过 CSV 和缓存打开
@@ -15,15 +16,23 @@
 
 #### Scenario: 分块可用
 - **WHEN** 从 Parquet 打开后请求第 100 块
-- **THEN** 返回正确区间，耗时不超过 0.2 秒
+- **THEN** 返回正确区间，耗时不超过 0.2 秒（1000 万行实测 0.057 秒）
+
+#### Scenario: 打开不拷数据
+- **WHEN** 打开 1000 万行、20 列的 Parquet 缓存
+- **THEN** 打开耗时不超过 0.5 秒，不把整表拷进内存
 
 ### Requirement: data 视图保持一致
 
-从缓存打开后，SQL 抽屉里的 data 视图 SHALL 仍然可用，内容与 CSV 路径一致。
+从缓存打开后，SQL 抽屉里的 data 视图 SHALL 仍然可用，内容与 CSV 路径一致。内部行号列 SHALL NOT 出现在 data 视图或列检查器里。
 
 #### Scenario: 查询缓存数据
 - **WHEN** 从缓存打开后执行 SELECT count(*) FROM data
 - **THEN** 返回文件总行数
+
+#### Scenario: 不暴露内部行号
+- **WHEN** 从缓存的 Parquet 打开后执行 SELECT * FROM data
+- **THEN** 结果列只有文件本身的列，不含内部行号
 
 ### Requirement: 基础数据物化并分配行号
 
