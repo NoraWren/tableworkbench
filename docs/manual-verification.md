@@ -56,6 +56,9 @@
 | 运行 SELEC * FROM data | 显示原始错误和中文说明 | R-SQL-03 |
 | 运行 CREATE TEMP TABLE t AS SELECT 1 AS a | 成功，随后能查 t | R-SQL-02 |
 | 点“返回数据” | 回到表格 | R-SQL-03 |
+| 在 SQL 抽屉点“存为片段”，输入名字region后保存 | 侧栏出现“SQL 片段 / region”，popover 关闭 | R-SQL-04 |
+| 把编辑器内容改成别的语句，再点侧栏的 region | 编辑器填回片段语句，SQL 抽屉保持展开，不自动执行 | R-SQL-04 |
+| 右键片段选“删除” | 侧栏不再显示该片段，存储里的数组变空 | R-SQL-04 |
 
 ## 5. 透视
 

@@ -44,3 +44,83 @@ SQL 抽屉 SHALL 只允许 SELECT、WITH、DESCRIBE、SUMMARIZE 和 CREATE TEMP�
 #### Scenario: 创建临时表
 - **WHEN** 用户执行 CREATE TEMP TABLE t AS SELECT 1 AS a
 - **THEN** 语句成功，随后可以查询 t，源文件哈希不变
+
+### Requirement: 记录执行过的 SQL
+
+每次 SQL 执行成功后，应用 SHALL 把语句文本记入本地历史，最新的在最前。
+
+#### Scenario: 执行两条
+- **WHEN** 用户依次执行 SELECT 1 和 SELECT 2
+- **THEN** 历史第一条是 SELECT 2，第二条是 SELECT 1
+
+#### Scenario: 失败不记录
+- **WHEN** 用户执行一条语法错误的 SQL
+- **THEN** 历史不新增
+
+### Requirement: 去重与上限
+
+同一条语句再次执行 SHALL 移到最前，SHALL NOT 产生重复条目。历史最多保留 200 条，超出淘汰最旧的。
+
+#### Scenario: 重复执行
+- **WHEN** 用户再次执行历史里已有的 SELECT 1
+- **THEN** SELECT 1 移到第一条，总数不变
+
+#### Scenario: 超过 200 条
+- **WHEN** 用户执行第 201 条不同的 SQL
+- **THEN** 最旧的一条被移除，总数保持 200
+
+### Requirement: 搜索与回填
+
+历史面板 SHALL 支持按关键词搜索，点击条目 SHALL 把语句填回编辑器。
+
+#### Scenario: 搜索
+- **WHEN** 用户在历史里搜 group
+- **THEN** 只显示包含 group 的语句
+
+#### Scenario: 回填
+- **WHEN** 用户点击一条历史
+- **THEN** 编辑器内容变成该语句，可以直接运行
+
+### Requirement: 清除与持久化
+
+历史 SHALL 在重启后保留。用户 SHALL 能一键清空历史。
+
+#### Scenario: 重启
+- **WHEN** 用户重启应用
+- **THEN** 之前的历史仍在
+
+#### Scenario: 清空
+- **WHEN** 用户点击清空历史
+- **THEN** 列表为空，重启后仍为空
+
+### Requirement: 保存片段
+
+用户 SHALL 能把当前 SQL 以名字保存为片段。名字或语句为空时 SHALL 拒绝。同名片段 SHALL 覆盖旧内容。
+
+#### Scenario: 保存新片段
+- **WHEN** 用户把 SELECT ... 保存为“每月毛利”
+- **THEN** 侧栏出现“每月毛利”，点击后编辑器填入该语句
+
+#### Scenario: 同名覆盖
+- **WHEN** 用户再次保存“每月毛利”但语句不同
+- **THEN** 列表仍只有一条，内容是新的
+
+### Requirement: 回填与删除
+
+点击片段 SHALL 把语句填回 SQL 编辑器，SHALL NOT 自动执行。用户 SHALL 能删除片段。
+
+#### Scenario: 回填
+- **WHEN** 用户点击片段
+- **THEN** 编辑器内容变成片段语句，SQL 抽屉展开
+
+#### Scenario: 删除
+- **WHEN** 用户删除片段
+- **THEN** 侧栏不再显示，重启后也不在
+
+### Requirement: 持久化
+
+片段 SHALL 在重启后保留。
+
+#### Scenario: 重启
+- **WHEN** 用户重启应用
+- **THEN** 片段列表与名称不变

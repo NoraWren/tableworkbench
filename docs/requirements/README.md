@@ -60,7 +60,7 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 01-product-scope.md | 7 | 已定义 |
 | 02-data-import.md | 7 | 已实现，验收框待同步 |
 | 03-data-grid.md | 8 | 已实现，R-GRID-08 已完成 |
-| 04-sql-console.md | 5 | 已实现，验收框待同步 |
+| 04-sql-console.md | 5 | 已实现；R-SQL-02/04 已完成，R-SQL-01/03/05 剩个别验收项待同步 |
 | 05-pivot-table.md | 4 | 已实现；R-PVT-01/02/03/04 的勾选已同步，剩“多级表头逐级合并”未做 |
 | 06-column-inspector.md | 4 | 已实现，验收框待同步 |
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
