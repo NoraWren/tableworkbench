@@ -40,6 +40,7 @@ var warmCache = false
 var pivotBench = false
 var statsColumn: String?
 var printValues = false
+var exportPaths: [ExportFormat: String] = [:]
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -83,6 +84,14 @@ while argumentIndex < arguments.count {
     case "--values":
         printValues = true
         argumentIndex += 1
+    case "--export-parquet", "--export-csv":
+        if argumentIndex + 1 < arguments.count {
+            let format: ExportFormat = arguments[argumentIndex] == "--export-parquet" ? .parquet : .csv
+            exportPaths[format] = arguments[argumentIndex + 1]
+            argumentIndex += 2
+        } else {
+            argumentIndex += 1
+        }
     case "--filter":
         if argumentIndex + 1 < arguments.count, let separator = arguments[argumentIndex + 1].firstIndex(of: "=") {
             let pair = arguments[argumentIndex + 1]
@@ -118,6 +127,25 @@ do {
     let firstBlock = try opened.session.block(offset: 0, size: 1)
     let firstRow = firstBlock.rows.first ?? []
     let firstCell: String? = firstRow.first ?? nil
+
+    if !exportPaths.isEmpty {
+        for (format, path) in exportPaths.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+            let started = Date()
+            let destination = URL(fileURLWithPath: path)
+            let rows = try opened.session.export(to: destination, format: format)
+            let seconds = Date().timeIntervalSince(started)
+            let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)??.intValue ?? 0
+            print(String(
+                format: "导出 %@: %d 行, %.3f 秒, %d 字节 -> %@",
+                format == .parquet ? "Parquet" : "CSV",
+                rows,
+                seconds,
+                size,
+                path
+            ))
+        }
+        exit(0)
+    }
 
     if let statsColumn {
         let started = Date()
