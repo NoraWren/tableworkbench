@@ -3,6 +3,7 @@ import Foundation
 import DuckDBKit
 import Features
 import DataGrid
+import SQLEditorUI
 
 final class SQLState: ObservableObject {
     @Published var text = "SELECT * FROM data LIMIT 100"
@@ -23,6 +24,9 @@ struct SQLEditor: View {
     let isRunning: Bool
     @ObservedObject var history: SQLHistoryStore
     @ObservedObject var snippets: SQLSnippetStore
+    /// 当前会话的表名与列名，补全候选来自这里。
+    var tables: [String] = ["data"]
+    var columns: [String] = []
     let onRun: () -> Void
 
     @StateObject private var panel = HistoryPanelState()
@@ -79,10 +83,10 @@ struct SQLEditor: View {
                 .keyboardShortcut("r", modifiers: .command)
                 .disabled(isRunning)
             }
-            TextEditor(text: $state.text)
-                .font(.system(.body, design: .monospaced))
+            SQLTextView(text: $state.text, columns: columns, tables: tables)
                 .frame(minHeight: 90)
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.separator))
+                .help("输入表名或列名前缀会弹出候选，Tab 或回车接受，Esc 关闭")
         }
         .padding(12)
     }

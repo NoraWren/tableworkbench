@@ -24,9 +24,10 @@ let package = Package(
         .target(name: "DataGrid", dependencies: ["DuckDBKit"]),
         .target(name: "ChartUI", dependencies: ["DuckDBKit"]),
         .target(name: "Features", dependencies: ["DuckDBKit"]),
+        .target(name: "SQLEditorUI", dependencies: ["DuckDBKit", "Features"]),
         .executableTarget(
             name: "TableWorkbenchApp",
-            dependencies: ["Features", "DataGrid", "DuckDBKit", "ChartUI"]
+            dependencies: ["Features", "DataGrid", "DuckDBKit", "ChartUI", "SQLEditorUI"]
         ),
         .executableTarget(
             name: "TableWorkbenchBench",
@@ -41,8 +42,12 @@ let package = Package(
             dependencies: ["ChartUI", "DuckDBKit"]
         ),
         .executableTarget(
+            name: "TableWorkbenchSQLSnapshot",
+            dependencies: ["DuckDBKit", "Features", "SQLEditorUI"]
+        ),
+        .executableTarget(
             name: "TableWorkbenchTests",
-            dependencies: ["DuckDBKit", "Features", "DataGrid"]
+            dependencies: ["DuckDBKit", "Features", "DataGrid", "SQLEditorUI"]
         )
     ],
     swiftLanguageModes: [.v5]

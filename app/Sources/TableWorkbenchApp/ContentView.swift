@@ -110,7 +110,9 @@ struct ContentView: View {
                         state: sql,
                         isRunning: model.isRunningSQL,
                         history: model.sqlHistory,
-                        snippets: snippets
+                        snippets: snippets,
+                        tables: ["data"],
+                        columns: model.selectedEntry?.columns.map(\.name) ?? []
                     ) {
                         if let entry = model.selectedEntry {
                             model.runSQL(entryID: entry.id, sql: sql.text)

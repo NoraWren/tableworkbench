@@ -5,6 +5,8 @@ import Darwin
 import DuckDBKit
 import Features
 import DataGrid
+import SQLEditorUI
+import SwiftUI
 
 var failures = 0
 
@@ -904,6 +906,151 @@ func run() throws {
     check("5 个文件选中第一个", MainActor.assumeIsolated { fiveModel.selection == fiveFirst })
     MainActor.assumeIsolated {
         for entry in fiveModel.entries { entry.session.close() }
+    }
+
+    // SQL 补全（R-SQL-05）
+    let sqlColumns = ["订单编号", "客户名称", "金额", "城市"]
+    let sqlTables = ["data"]
+
+    let selectContext = SQLCompletion.context(in: "sel", caret: 3, tables: sqlTables)
+    check("补全认 sel 为词前缀", selectContext == SQLCompletion.Context(prefix: "sel", qualifier: nil, kind: .column))
+    let selectCandidates = SQLCompletion.candidates(
+        context: selectContext!,
+        columns: sqlColumns,
+        tables: sqlTables
+    )
+    check("补全候选含 SELECT", selectCandidates.contains("SELECT"))
+    check("补全候选把 SELECT 排前面", selectCandidates.first == "SELECT")
+
+    let fromContext = SQLCompletion.context(in: "SELECT * FROM ", caret: 14, tables: sqlTables)
+    check("补全在 FROM 后不弹候选", fromContext == nil)
+    let fromTyped = SQLCompletion.context(in: "SELECT * FROM da", caret: 16, tables: sqlTables)
+    check("补全认 FROM 后补表名", fromTyped?.kind == .table)
+    check(
+        "补全列出当前表",
+        SQLCompletion.candidates(context: fromTyped!, columns: sqlColumns, tables: sqlTables) == ["data"]
+    )
+
+    let qualified = SQLCompletion.context(in: "SELECT data.金", caret: 13, tables: sqlTables)
+    check("补全认表名限定", qualified?.qualifier == "data")
+    check("补全限定后只补列", qualified?.kind == .column)
+    check(
+        "补全塞选中文列",
+        SQLCompletion.candidates(context: qualified!, columns: sqlColumns, tables: sqlTables) == ["金额"]
+    )
+
+    let unknownQualifier = SQLCompletion.context(in: "SELECT nope.金", caret: 13, tables: sqlTables)
+    check("未知表名限定不弹候选", unknownQualifier == nil)
+
+    let inLiteral = SQLCompletion.context(in: "SELECT * FROM data WHERE 城市 = '杭", caret: 30, tables: sqlTables)
+    check("补全不在字符串里弹", inLiteral == nil)
+    let inComment = SQLCompletion.context(in: "SELECT * FROM data -- 这是注释", caret: 26, tables: sqlTables)
+    check("补全不在注释里弹", inComment == nil)
+
+    let applied = SQLCompletion.apply(candidate: "SELECT", to: "sel", caret: 3)
+    check("补全替换词前缀", applied?.text == "SELECT")
+    check("补全后光标在词尾", applied?.caret == 6)
+    let appliedMid = SQLCompletion.apply(candidate: "SELECT", to: "sel * FROM data", caret: 3)
+    check("补全保留后半句", appliedMid?.text == "SELECT * FROM data")
+
+    let appliedQualified = SQLCompletion.apply(candidate: "金额", to: "SELECT data.金", caret: 13)
+    check("补全保留表名限定", appliedQualified?.text == "SELECT data.金额")
+
+    let groupBy = SQLCompletion.apply(candidate: "GROUP BY", to: "GROUP", caret: 5)
+    check("补全多词关键字带空格", groupBy?.text == "GROUP BY ")
+
+    check(
+        "补全去重",
+        SQLCompletion.candidates(
+            context: SQLCompletion.Context(prefix: "cou", qualifier: nil, kind: .column),
+            columns: ["count"],
+            tables: sqlTables
+        ).count == 1
+    )
+    check(
+        "补全不重复给出已敲完整的词",
+        SQLCompletion.candidates(
+            context: SQLCompletion.Context(prefix: "SELECT", qualifier: nil, kind: .column),
+            columns: [],
+            tables: sqlTables
+        ).isEmpty
+    )
+    check(
+        "补全空前缀不弹",
+        SQLCompletion.candidates(
+            context: SQLCompletion.Context(prefix: "", qualifier: nil, kind: .column),
+            columns: sqlColumns,
+            tables: sqlTables
+        ).isEmpty
+    )
+
+    // 补全弹窗的真实窗口交互（R-SQL-05）
+    func makeCompletionSource(columns: [String], tables: [String]) -> SQLTextView.Coordinator {
+        var storage = ""
+        let binding = Binding(get: { storage }, set: { storage = $0 })
+        let coordinator = SQLTextView.Coordinator(text: binding)
+        coordinator.columns = columns
+        coordinator.tables = tables
+        return coordinator
+    }
+
+    func makeWindow(text: String) -> (NSPanel, CompletionTextView) {
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 200),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let textView = CompletionTextView(frame: NSRect(x: 0, y: 0, width: 580, height: 180))
+        textView.isRichText = false
+        textView.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+        panel.contentView?.addSubview(textView)
+        textView.string = text
+        return (panel, textView)
+    }
+
+    let completionColumns = ["订单编号", "客户名称", "金额", "城市"]
+    let completionTables = ["data"]
+    let completionSource = makeCompletionSource(columns: completionColumns, tables: completionTables)
+    let (completionWindow, completionView) = makeWindow(text: "sel")
+    completionView.completionSource = completionSource
+    completionView.setSelectedRange(NSRange(location: 3, length: 0))
+    completionView.refreshCompletion()
+    check("弹窗在输入前缀后出现", completionView.isSuggesting)
+    check("弹窗候选含 SELECT", completionView.suggestions.contains("SELECT"))
+    completionView.acceptSuggestion(at: 0)
+    check("Tab 接受后补成 SELECT", completionView.string == "SELECT")
+    check("接受后弹窗收起", !completionView.isSuggesting)
+
+    let (commentWindow, commentView) = makeWindow(text: "-- 注释")
+    commentView.completionSource = completionSource
+    commentView.setSelectedRange(NSRange(location: 4, length: 0))
+    commentView.refreshCompletion()
+    check("注释里不弹候选", !commentView.isSuggesting)
+
+    let (literalWindow, literalView) = makeWindow(text: "SELECT 城市 FROM data WHERE 城市 = '杭")
+    literalView.completionSource = completionSource
+    literalView.setSelectedRange(NSRange(location: (literalView.string as NSString).length, length: 0))
+    literalView.refreshCompletion()
+    check("字符串里不弹候选", !literalView.isSuggesting)
+
+    let (clearWindow, clearView) = makeWindow(text: "SELECT * FROM data ")
+    clearView.completionSource = completionSource
+    let end = (clearView.string as NSString).length
+    clearView.setSelectedRange(NSRange(location: end, length: 0))
+    clearView.refreshCompletion()
+    check("左括号与空格后不弹候选", !clearView.isSuggesting)
+
+    let (qualifiedWindow, qualifiedView) = makeWindow(text: "SELECT data.金")
+    qualifiedView.completionSource = completionSource
+    qualifiedView.setSelectedRange(NSRange(location: 13, length: 0))
+    qualifiedView.refreshCompletion()
+    check("表名限定后弹列名", qualifiedView.suggestions == ["金额"])
+    qualifiedView.acceptSuggestion(at: 0)
+    check("限定补全保留表名", qualifiedView.string == "SELECT data.金额")
+
+    for window in [completionWindow, commentWindow, literalWindow, clearWindow, qualifiedWindow] {
+        window.close()
     }
 }
 
