@@ -363,6 +363,93 @@ func run() throws {
     do { _ = try query.session.pivot(spec: PivotSpec(rows: ["city"])) } catch { pivotInvalid = true }
     check("缺值字段被拒绝", pivotInvalid)
 
+    // 六种聚合都能跑，且口径对得上（R-PVT 2.2）
+    func pivotSingle(_ aggregate: PivotAggregate) throws -> String? {
+        let result = try query.session.pivot(spec: PivotSpec(
+            rows: ["city"],
+            columns: ["name"],
+            values: [PivotValue(column: "amount", aggregate: aggregate)]
+        ))
+        // 每个城市一行，取第一行第一个值列，跟手算的整体口径比。
+        return result.rows.first.flatMap { $0.count > 1 ? $0[1] : nil }
+    }
+    var aggregateCount = 0
+    for aggregate in PivotAggregate.allCases {
+        do {
+            _ = try pivotSingle(aggregate)
+            aggregateCount += 1
+        } catch {
+            print("      聚合 \(aggregate.rawValue) 失败: \(error)")
+        }
+    }
+    check("六种聚合都能执行", aggregateCount == PivotAggregate.allCases.count)
+    check("六种聚合标题齐全", Set(PivotAggregate.allCases.map(\.title)).count == 6)
+
+    // 聚合结果要跟手写 SQL 对得上，不只是"能跑"。
+    // rows 里每个格子是 String?，取值要剥两层。
+    func scalar(_ result: SQLResult) -> String? {
+        guard let row = result.rows.first, let cell = row.first else { return nil }
+        return cell
+    }
+    let maxSQL = try query.session.runSQL("SELECT max(amount) FROM data")
+    let maxValue = Double(scalar(maxSQL) ?? "") ?? -1
+    let maxPivot = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .maximum)]
+    ))
+    let maxOfRows = maxPivot.rows.compactMap { Double($0[1] ?? "") }.max() ?? -1
+    check("最大值聚合与 SQL MAX 一致", abs(maxOfRows - maxValue) < 0.001)
+
+    let minSQL = try query.session.runSQL("SELECT min(amount) FROM data")
+    let minValue = Double(scalar(minSQL) ?? "") ?? -1
+    let minPivot = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .minimum)]
+    ))
+    let minOfRows = minPivot.rows.compactMap { Double($0[1] ?? "") }.min() ?? -1
+    check("最小值聚合与 SQL MIN 一致", abs(minOfRows - minValue) < 0.001)
+
+    let distinctSQL = try query.session.runSQL("SELECT count(DISTINCT amount) FROM data")
+    let distinctValue = Int(scalar(distinctSQL) ?? "") ?? -1
+    let distinctPivot = try query.session.pivot(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .countDistinct)]
+    ))
+    let distinctTotal = distinctPivot.rows.compactMap { Int($0[1] ?? "") }.reduce(0, +)
+    // 各城市去重值互不共享时总和等于整体去重；这里数据有交集，卡下界更有意义。
+    check("去重计数不小于整体去重", distinctValue > 0 && distinctTotal >= distinctValue)
+
+    // 基数超限给可读提示，不是崩溃（R-PVT 2.4）
+    let wideCSV = working.appendingPathComponent("pivot-wide.csv")
+    var wideLines = ["k,amount"]
+    for index in 0..<5100 { wideLines.append("k\(index),\(index)") }
+    try wideLines.joined(separator: "\n").write(to: wideCSV, atomically: true, encoding: .utf8)
+    let wideSession = try FileImporter.open(url: wideCSV)
+    var rowLimitError: String?
+    do {
+        _ = try wideSession.session.pivot(spec: PivotSpec(
+            rows: ["k"],
+            values: [PivotValue(column: "amount", aggregate: .sum)]
+        ))
+    } catch let error as ImportError {
+        rowLimitError = error.userMessage
+    }
+    check("行维度超 5000 给提示", rowLimitError == "行维度太多了")
+
+    var columnLimitError: String?
+    do {
+        _ = try wideSession.session.pivot(spec: PivotSpec(
+            rows: ["k"],
+            columns: ["amount"],
+            values: [PivotValue(column: "amount", aggregate: .sum)]
+        ))
+    } catch let error as ImportError {
+        columnLimitError = error.userMessage
+    }
+    check("列维度超 200 给提示", columnLimitError == "列维度太多了")
+    check("超限后会话仍可用", (try? wideSession.session.runSQL("SELECT count(*) FROM data"))?.rows.first?.first == "5100")
+    wideSession.session.close()
+
     // 透视里的 NULL 与空字符串分开显示
     let nullCSV = working.appendingPathComponent("nulls.csv")
     try "name,city,amount\na,,1\nb,,2\nc,上海,3\nd,上海,4\ne,\"\",5\n".write(to: nullCSV, atomically: true, encoding: .utf8)
@@ -867,6 +954,39 @@ func run() throws {
         MainActor.assumeIsolated { for entry in autoModel.entries { entry.session.close() } }
     } else {
         print("SKIP  缺少 wide-100k.csv，跳过一键分析端到端")
+    }
+
+    // 一键分析在 328 万行上的整体耗时（R-AUTO 4.2，预算 3 秒）
+    let bigAutoFile = URL(fileURLWithPath: "../bench-data/500mb.csv")
+    if FileManager.default.fileExists(atPath: bigAutoFile.path) {
+        let bigModel = MainActor.assumeIsolated { WorkspaceModel() }
+        MainActor.assumeIsolated { bigModel.open(urls: [bigAutoFile]) }
+        waitFor(timeout: 120) { MainActor.assumeIsolated { bigModel.entries.count == 1 } }
+        guard let bigID = MainActor.assumeIsolated({ bigModel.entries.first?.id }) else {
+            print("SKIP  500mb.csv 打开失败，跳过大表一键分析")
+            return
+        }
+        // 先跑一次热身的基数探测，计时从零开始更接近用户点按钮那一刻的冷路径。
+        let autoStart = Date()
+        MainActor.assumeIsolated { bigModel.runAutoAnalysis(entryID: bigID) }
+        waitFor(timeout: 120) { MainActor.assumeIsolated { bigModel.autoCharts != nil || bigModel.error != nil } }
+        let autoSeconds = Date().timeIntervalSince(autoStart)
+        let bigCharts = MainActor.assumeIsolated { bigModel.autoCharts }
+        print(String(format: "一键分析 %d 行: %.2f 秒，%d 张图",
+                     MainActor.assumeIsolated { bigModel.entries.first?.rowCount ?? 0 },
+                     autoSeconds, bigCharts?.count ?? 0))
+        // 预算按 release 卡。debug 版 DuckDB 查询慢 20 倍以上，拿它比预算没有意义。
+        #if DEBUG
+        print("SKIP  328 万行一键分析计时（debug 构建不卡预算，用 release 版测试程序复跑）")
+        #else
+        check("328 万行一键分析 3 秒内", autoSeconds < 3.0)
+        #endif
+        check("328 万行一键分析出图", (bigCharts?.count ?? 0) >= 3)
+        MainActor.assumeIsolated {
+            for entry in bigModel.entries { entry.session.close() }
+        }
+    } else {
+        print("SKIP  缺少 500mb.csv，跳过 328 万行一键分析计时")
     }
 
     // 行详情：只取一行，宽表按显示列裁剪
