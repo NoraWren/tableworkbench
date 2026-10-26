@@ -21,10 +21,11 @@ final class CommandBus: ObservableObject {
     private init() {}
 }
 
-struct FileCommands: Commands {
+public struct FileCommands: Commands {
     @ObservedObject private var bus = CommandBus.shared
+    public init() {}
 
-    var body: some Commands {
+    public var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("打开文件…") { bus.open() }
                 .keyboardShortcut("o", modifiers: .command)
@@ -40,10 +41,11 @@ struct FileCommands: Commands {
     }
 }
 
-struct QueryCommands: Commands {
+public struct QueryCommands: Commands {
     @ObservedObject private var bus = CommandBus.shared
+    public init() {}
 
-    var body: some Commands {
+    public var body: some Commands {
         CommandMenu("查询") {
             Button("运行") { bus.runSQL() }
                 .keyboardShortcut("r", modifiers: .command)

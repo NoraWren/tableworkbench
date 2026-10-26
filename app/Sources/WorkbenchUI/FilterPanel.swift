@@ -14,19 +14,19 @@ private final class FilterState: ObservableObject {
     }
 }
 
-struct FilterPanel: View {
+public struct FilterPanel: View {
     let columns: [ColumnInfo]
     let onApply: (FilterGroup?) -> Void
 
     @StateObject private var state: FilterState
 
-    init(columns: [ColumnInfo], initial: FilterGroup?, onApply: @escaping (FilterGroup?) -> Void) {
+    public init(columns: [ColumnInfo], initial: FilterGroup?, onApply: @escaping (FilterGroup?) -> Void) {
         self.columns = columns
         self.onApply = onApply
         _state = StateObject(wrappedValue: FilterState(group: initial ?? FilterGroup(), columns: columns))
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("筛选条件")
                 .font(.headline)

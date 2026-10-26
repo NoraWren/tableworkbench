@@ -11,14 +11,15 @@ private final class PrivacyState: ObservableObject {
     }
 }
 
-struct SettingsView: View {
+public struct SettingsView: View {
     @AppStorage("cacheLimitGB") private var cacheLimitGB = 10
     @AppStorage("defaultExportFormat") private var exportFormat = "csv"
     @AppStorage("copyIncludesHeader") private var copyIncludesHeader = true
 
     @StateObject private var privacy = PrivacyState()
+    public init() {}
 
-    var body: some View {
+    public var body: some View {
         TabView {
             general
                 .tabItem { Label("通用", systemImage: "gearshape") }

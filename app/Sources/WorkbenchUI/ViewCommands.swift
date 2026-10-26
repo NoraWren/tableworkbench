@@ -1,12 +1,13 @@
 import SwiftUI
 
 /// 视图菜单：侧栏、检查器、SQL 抽屉。状态都存在 UserDefaults 里，菜单和界面共用同一份。
-struct ViewCommands: Commands {
+public struct ViewCommands: Commands {
     @AppStorage("sidebarShown") private var sidebarShown = true
     @AppStorage("inspectorShown") private var inspectorShown = true
     @AppStorage("sqlShown") private var sqlShown = false
+    public init() {}
 
-    var body: some Commands {
+    public var body: some Commands {
         CommandMenu("视图") {
             Button(sidebarShown ? "隐藏侧栏" : "显示侧栏") {
                 sidebarShown.toggle()

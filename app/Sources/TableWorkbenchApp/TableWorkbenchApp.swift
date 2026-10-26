@@ -2,22 +2,7 @@ import SwiftUI
 import AppKit
 import Features
 import DuckDBKit
-
-@MainActor
-final class AppEnvironment {
-    static let shared = AppEnvironment()
-    let model = WorkspaceModel()
-    private init() {}
-}
-
-/// Finder 打开文件的事件先交给界面层，界面还没起来就暂存。
-@MainActor
-final class OpenRequestBus {
-    static let shared = OpenRequestBus()
-    var handle: (([URL]) -> Void)?
-    var pending: [URL] = []
-    private init() {}
-}
+import WorkbenchUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -59,7 +44,7 @@ struct TableWorkbenchApp: App {
 
     var body: some Scene {
         Window("本地表格工作台", id: "main") {
-            ContentView(model: model)
+            WorkbenchRootView(model: model)
                 .frame(minWidth: 900, minHeight: 600)
         }
         .windowToolbarStyle(.unified)

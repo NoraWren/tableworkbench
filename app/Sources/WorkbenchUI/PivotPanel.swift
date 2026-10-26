@@ -2,46 +2,68 @@ import SwiftUI
 import Combine
 import DuckDBKit
 
+/// 视图状态只是把 PivotDraft 包一层，让 SwiftUI 能观察到变化。
 private final class PivotState: ObservableObject {
-    @Published var rows: [String] = []
-    @Published var columns: [String] = []
-    @Published var values: [PivotValue] = []
+    let draft: PivotDraft
 
-    var spec: PivotSpec {
-        PivotSpec(rows: rows, columns: columns, values: values)
-    }
-
-    var canRun: Bool {
-        !rows.isEmpty && !values.isEmpty
-    }
-
-    func add(_ field: String, to area: PivotArea) {
-        switch area {
-        case .rows:
-            if !rows.contains(field) { rows.append(field) }
-        case .columns:
-            if !columns.contains(field) { columns.append(field) }
-        case .values:
-            if !values.contains(where: { $0.column == field }) {
-                values.append(PivotValue(column: field))
+    init(seeding source: PivotDraft? = nil) {
+        let draft = PivotDraft()
+        if let source {
+            // 复制一份，别让面板改到外面那份。
+            for field in source.rows { draft.add(field, to: .rows) }
+            for field in source.columns { draft.add(field, to: .columns) }
+            for value in source.values {
+                draft.add(value.column, to: .values)
+                draft.setAggregate(value.aggregate, for: value.column)
             }
         }
+        self.draft = draft
+    }
+
+    var rows: [String] { draft.rows }
+    var columns: [String] { draft.columns }
+    var values: [PivotValue] { draft.values }
+    var canRun: Bool { draft.canRun }
+    var spec: PivotSpec { draft.spec }
+
+    func add(_ field: String, to area: PivotDraft.Area) {
+        objectWillChange.send()
+        draft.add(field, to: area)
+    }
+
+    func remove(_ field: String, from area: PivotDraft.Area) {
+        objectWillChange.send()
+        draft.remove(field, from: area)
+    }
+
+    func removeValue(at index: Int) {
+        objectWillChange.send()
+        draft.removeValue(at: index)
+    }
+
+    func setAggregate(_ aggregate: PivotAggregate, for field: String) {
+        objectWillChange.send()
+        draft.setAggregate(aggregate, for: field)
     }
 }
 
-private enum PivotArea: String {
-    case rows = "行"
-    case columns = "列"
-    case values = "值"
-}
-
-struct PivotPanel: View {
+public struct PivotPanel: View {
     let columns: [ColumnInfo]
     let onRun: (PivotSpec) -> Void
 
-    @StateObject private var state = PivotState()
+    @StateObject private var state: PivotState
 
-    var body: some View {
+    public init(
+        columns: [ColumnInfo],
+        draft: PivotDraft? = nil,
+        onRun: @escaping (PivotSpec) -> Void
+    ) {
+        self.columns = columns
+        _state = StateObject(wrappedValue: PivotState(seeding: draft))
+        self.onRun = onRun
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("透视表")
                 .font(.headline)
@@ -65,10 +87,10 @@ struct PivotPanel: View {
             }
 
             dropArea("行", area: .rows, items: state.rows) { field in
-                state.rows.removeAll { $0 == field }
+                state.remove(field, from: .rows)
             }
             dropArea("列", area: .columns, items: state.columns) { field in
-                state.columns.removeAll { $0 == field }
+                state.remove(field, from: .columns)
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -76,7 +98,10 @@ struct PivotPanel: View {
                 ForEach(state.values.indices, id: \.self) { index in
                     HStack(spacing: 8) {
                         Text(state.values[index].column)
-                        Picker("聚合", selection: $state.values[index].aggregate) {
+                        Picker("聚合", selection: Binding(
+                            get: { state.values[index].aggregate },
+                            set: { state.setAggregate($0, for: state.values[index].column) }
+                        )) {
                             ForEach(PivotAggregate.allCases, id: \.self) { aggregate in
                                 Text(aggregate.title).tag(aggregate)
                             }
@@ -84,7 +109,7 @@ struct PivotPanel: View {
                         .labelsHidden()
                         .frame(width: 110)
                         Button {
-                            state.values.remove(at: index)
+                            state.removeValue(at: index)
                         } label: {
                             Image(systemName: "xmark.circle")
                         }
@@ -119,7 +144,7 @@ struct PivotPanel: View {
 
     private func dropArea(
         _ title: String,
-        area: PivotArea,
+        area: PivotDraft.Area,
         items: [String],
         onRemove: @escaping (String) -> Void
     ) -> some View {

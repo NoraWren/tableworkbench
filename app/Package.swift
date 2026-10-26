@@ -25,9 +25,13 @@ let package = Package(
         .target(name: "ChartUI", dependencies: ["DuckDBKit"]),
         .target(name: "Features", dependencies: ["DuckDBKit"]),
         .target(name: "SQLEditorUI", dependencies: ["DuckDBKit", "Features"]),
+        .target(
+            name: "WorkbenchUI",
+            dependencies: ["Features", "DataGrid", "DuckDBKit", "ChartUI", "SQLEditorUI"]
+        ),
         .executableTarget(
             name: "TableWorkbenchApp",
-            dependencies: ["Features", "DataGrid", "DuckDBKit", "ChartUI", "SQLEditorUI"]
+            dependencies: ["Features", "DataGrid", "DuckDBKit", "ChartUI", "SQLEditorUI", "WorkbenchUI"]
         ),
         .executableTarget(
             name: "TableWorkbenchBench",
@@ -46,8 +50,12 @@ let package = Package(
             dependencies: ["DuckDBKit", "Features", "SQLEditorUI"]
         ),
         .executableTarget(
+            name: "TableWorkbenchUIAudit",
+            dependencies: ["DuckDBKit", "Features", "DataGrid", "ChartUI", "WorkbenchUI"]
+        ),
+        .executableTarget(
             name: "TableWorkbenchTests",
-            dependencies: ["DuckDBKit", "Features", "DataGrid", "SQLEditorUI"]
+            dependencies: ["DuckDBKit", "Features", "DataGrid", "SQLEditorUI", "ChartUI", "WorkbenchUI"]
         )
     ],
     swiftLanguageModes: [.v5]

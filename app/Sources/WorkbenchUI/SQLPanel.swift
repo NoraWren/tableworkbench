@@ -5,8 +5,9 @@ import Features
 import DataGrid
 import SQLEditorUI
 
-final class SQLState: ObservableObject {
-    @Published var text = "SELECT * FROM data LIMIT 100"
+public final class SQLState: ObservableObject {
+    @Published public var text = "SELECT * FROM data LIMIT 100"
+    public init() {}
 }
 
 private final class HistoryPanelState: ObservableObject {
@@ -19,7 +20,7 @@ private final class SnippetPanelState: ObservableObject {
     @Published var name = ""
 }
 
-struct SQLEditor: View {
+public struct SQLEditor: View {
     @ObservedObject var state: SQLState
     let isRunning: Bool
     @ObservedObject var history: SQLHistoryStore
@@ -32,7 +33,25 @@ struct SQLEditor: View {
     @StateObject private var panel = HistoryPanelState()
     @StateObject private var snippetPanel = SnippetPanelState()
 
-    var body: some View {
+    public init(
+        state: SQLState,
+        isRunning: Bool,
+        history: SQLHistoryStore,
+        snippets: SQLSnippetStore,
+        tables: [String] = ["data"],
+        columns: [String] = [],
+        onRun: @escaping () -> Void
+    ) {
+        self.state = state
+        self.isRunning = isRunning
+        self.history = history
+        self.snippets = snippets
+        self.tables = tables
+        self.columns = columns
+        self.onRun = onRun
+    }
+
+    public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("SQL")
@@ -129,21 +148,28 @@ struct SQLEditor: View {
     }
 }
 
-struct SQLResultView: View {
+public struct SQLResultView: View {
     let result: SQLResult
     let title: String
     let onClose: () -> Void
 
-    var body: some View {
-        VStack(spacing: 0) {
+    public init(result: SQLResult, title: String, onClose: @escaping () -> Void) {
+        self.result = result
+        self.title = title
+        self.onClose = onClose
+    }
+
+    public var body: some View {
+        let status = SQLResultStatus(result: result, title: title)
+        return VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text(title)
+                Text(status.headline)
                     .font(.headline)
-                Text("\(result.rowCount) 行 · \(String(format: "%.2f", result.elapsed)) 秒")
+                Text(status.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if result.truncated {
-                    Text("只显示前 100000 行")
+                if let notice = status.truncationNotice {
+                    Text(notice)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -157,14 +183,16 @@ struct SQLResultView: View {
 
             Divider()
 
-            if result.rowCount == 0 {
-                Text("0 行")
+            if let placeholder = status.emptyPlaceholder {
+                Text(placeholder)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 DataGridView(
                     columns: result.columns,
-                    rowCount: result.rowCount,
+                    // 行数按实际拿到的行算：结果被截断时两者相等，
+                    // 万一少了行也别在末尾刷一片假的 NULL。
+                    rowCount: min(result.rowCount, result.rows.count),
                     provider: { offset, size in
                         let start = max(0, min(offset, result.rows.count))
                         let end = max(start, min(offset + size, result.rows.count))
@@ -177,3 +205,31 @@ struct SQLResultView: View {
         }
     }
 }
+
+/// 结果网格上方的状态条：行数、耗时、截断提示。
+public struct SQLResultHeader: View {
+    let result: SQLResult
+    let title: String
+
+    public init(result: SQLResult, title: String) {
+        self.result = result
+        self.title = title
+    }
+
+    public var body: some View {
+        let status = SQLResultStatus(result: result, title: title)
+        HStack(spacing: 8) {
+            Text(status.headline)
+                .font(.headline)
+            Text(status.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let notice = status.truncationNotice {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+    }
+}
+
