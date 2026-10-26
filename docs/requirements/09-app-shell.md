@@ -19,18 +19,26 @@
 ## R-SHELL-02 菜单与快捷键
 
 - 优先级：P1
-- 状态：已定义
+- 状态：已完成
 - 行为：
-  - File：Open（Command+O）、Export（Command+Shift+E）、Close File（Command+W）。
+  - File：Open（Command+O）、Export（Command+Shift+E）、Close File（Shift+Command+W）。
   - Edit：Copy（Command+C）、Find（Command+F 聚焦筛选输入框）。
-  - View：Show/Hide Sidebar（Control+Command+S）、Show/Hide Inspector（Command+Option+I）、Show/Hide SQL（Command+J）、Toggle Dark Mode 跟随系统。
+  - View：Show/Hide Sidebar（Control+Command+S）、Show/Hide Inspector（Command+Option+I）、Show/Hide SQL（Command+J）。
   - Query：Run（Command+R）、Cancel（Command+.）、New Query（Command+N）。
   - Help：文档链接、报告问题。
 - 验收：
-  - [ ] 所有菜单项都有快捷键，且不与其他系统快捷键冲突
-  - [ ] 无可执行内容时，菜单项置灰而不是点了没反应
+  - [x] 所有菜单项都有快捷键，且不与其他系统快捷键冲突
+  - [x] 无可执行内容时，菜单项置灰而不是点了没反应
 - 边界：不做自定义快捷键设置。
 - 依赖：R-SHELL-01
+
+说明：
+
+- Close File 用 Shift+Command+W。Command+W 留给系统关窗口，替换会破坏习惯，见 \`openspec/changes/archive/\` 下 add-app-menu-bar 的 D3。
+- 不做 Toggle Dark Mode 菜单项。外观跟随系统，应用内不提供独立开关，见 R-SHELL-03。
+- Help 菜单（文档链接、报告问题）要等仓库公开、有 issue 地址之后才做，见 R-REL 发布相关条目。
+- 菜单项与快捷键集中写在 \`app/Sources/WorkbenchUI/MenuCatalog.swift\`，测试断言每项都带 Command、组合不重复、置灰状态随文件走。
+- 2026-10-26 逐条实测：11 项的键位用辅助功能属性读出来，与设计一致；菜单点击和快捷键两条路都过了一遍。⌘O、⌘J、⌃⌘S、⌥⌘I 用全屏合成按键；⇧⌘E、⇧⌘W、⇧⌘A、⌘R、⌘N、⌘F 改为直接投递给应用进程，因为本机前台常被浏览器与输入法切走，全屏合成的 Shift 组合会先被它们吃掉，与应用侧无关。
 
 ## R-SHELL-03 深色模式与外观
 

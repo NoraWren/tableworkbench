@@ -113,6 +113,27 @@
 
 用 Instruments 的 Core Animation 录 10 万行滚动，记录掉帧率。目标 60fps、掉帧低于 5%。这条不能用肉眼判断。
 
+## 9. 菜单与快捷键
+
+| 步骤 | 期望 | 需求 |
+|---|---|---|
+| 没打开文件时拉开「文件」和「查询」 | 只有「打开文件…」是黑字，导出、关闭文件、运行、新建查询、一键分析都置灰 | R-SHELL-02 |
+| 打开一个 CSV 再看这两个菜单 | 导出、关闭文件、运行、新建查询恢复可点 | R-SHELL-02 |
+| Shift+Command+E | 弹出导出面板，与点菜单同一回事 | R-SHELL-02 |
+| Command+R | 运行 SQL 抽屉里的语句，结果进入查询结果区 | R-SHELL-02 |
+| Command+N | SQL 抽屉展开，填好 SELECT * FROM data LIMIT 100 | R-SHELL-02 |
+| Shift+Command+A | 走一键分析，出 3–5 张图 | R-SHELL-02 |
+| Command+F | 弹出筛选面板，标题是「筛选条件」 | R-SHELL-02 |
+| Control+Command+S | 侧栏折叠；再按一次展开 | R-SHELL-01 |
+| Command+Option+I | 检查器收起；再按一次展开 | R-SHELL-01 |
+| Command+J | SQL 抽屉开合 | R-SQL-01 |
+| Command+. | 「查询 → 取消」始终灰着，v0.1 没有长查询可取消 | R-SHELL-02 |
+| 按住 Option 打开「查询」菜单看快捷键提示 | 每项后面都写着组合键，与上表一致 | R-SHELL-02 |
+
+收起侧栏后退出，重开应用，侧栏仍是收起的。
+
+快捷键只按「点菜单」和「按键盘」两条路各验一次就够。别再往工具栏或 SQL 面板上补第二份 keyboardShortcut：同一组合注册两次时系统会静默丢掉一个，按不出反应也很难查。
+
 ## 记录
 
 把通过/失败的条目写在这里，失败的贴截图和复现步骤。

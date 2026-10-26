@@ -65,7 +65,7 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 06-column-inspector.md | 4 | 已实现，验收框待同步 |
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
 | 08-performance.md | 7 | 基准已补齐：滚动帧耗时与冷启动都有实测；500MB 冷打开 2.0–2.4 秒贴着预算 |
-| 09-app-shell.md | 7 | 已实现，验收框待同步 |
+| 09-app-shell.md | 7 | 已实现；R-SHELL-02 菜单与 11 条快捷键逐条实测通过，其余条目验收框待同步 |
 | 10-packaging-release.md | 6 | dmg 已出，签名与公证缺账号 |
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 17 | 3 项待拍板 |
