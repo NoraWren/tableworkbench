@@ -64,12 +64,12 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 05-pivot-table.md | 4 | 已实现，验收框待同步 |
 | 06-column-inspector.md | 4 | 已实现，验收框待同步 |
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
-| 08-performance.md | 7 | 基准已有记录；滚动帧率待补测，1000 万行 Parquet 打开未达标（R-DEC-17） |
+| 08-performance.md | 7 | 基准已补齐：滚动帧耗时与冷启动都有实测；500MB 冷打开 2.0–2.4 秒贴着预算 |
 | 09-app-shell.md | 7 | 已实现，验收框待同步 |
 | 10-packaging-release.md | 6 | dmg 已出，签名与公证缺账号 |
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 17 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
-| 14-charts.md | 4 | 图表四类已实现，1 秒出图未达标 |
+| 14-charts.md | 5 | 图表四类、一键分析已实现；release 出图 0.07 秒 |
 
 共 101 条需求。
