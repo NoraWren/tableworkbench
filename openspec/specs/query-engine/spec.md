@@ -121,3 +121,51 @@
 #### Scenario: 连续打开关闭二十次
 - **WHEN** 用户连续打开并关闭同一个 1GB 文件 20 次
 - **THEN** 常驻内存回到基线附近，波动不超过 200MB
+
+### Requirement: 条件聚合
+
+透视 SHALL 使用 GROUP BY 加条件聚合生成交叉表。每个列维度取值 SHALL 变成一个条件列。
+
+#### Scenario: 两个列值
+- **WHEN** 列维度有华东和华南两个取值
+- **THEN** SQL 生成两个 SUM(CASE WHEN ...) 列，列名包含取值
+
+#### Scenario: 没有列维度
+- **WHEN** 只配置行和值
+- **THEN** SQL 只包含 GROUP BY 和聚合，不生成条件列
+
+### Requirement: 返回结构一致
+
+透视结果 SHALL 复用 SQL 结果的列、行、行数和耗时结构，列顺序为行维度在前、聚合列在后。
+
+#### Scenario: 列顺序
+- **WHEN** 行维度是区域和渠道
+- **THEN** 结果前两列是区域、渠道，后面才是聚合值
+
+### Requirement: 稳定的 data 视图
+
+打开文件后，应用 SHALL 提供名为 data 的视图，内容为文件全量数据，不受网格当前排序和筛选影响。
+
+#### Scenario: 查询 data
+- **WHEN** 用户执行 SELECT count(*) FROM data
+- **THEN** 返回文件总行数，即使网格正在筛选
+
+### Requirement: 执行用户 SQL 并返回结构
+
+执行入口 SHALL 返回列名、行数据、返回行数、耗时和是否截断。列顺序 SHALL 与查询一致。
+
+#### Scenario: 分组聚合
+- **WHEN** 用户执行按区域分组的金额求和
+- **THEN** 返回两列，行数等于区域数，数值与网格筛选结果一致
+
+#### Scenario: 结果列顺序
+- **WHEN** 用户执行 SELECT 金额, 区域 FROM data LIMIT 1
+- **THEN** 返回的列先是金额，再是区域
+
+### Requirement: 结果规模上限
+
+执行 SHALL 在用户 SQL 外层加 100001 行的上限，返回最多 100000 行，并用标志位说明是否被截断。
+
+#### Scenario: 超过上限
+- **WHEN** 用户 SQL 会返回 20 万行
+- **THEN** 返回 100000 行且 truncated 为 true
