@@ -364,6 +364,48 @@ func run() throws {
     do { _ = try query.session.pivot(spec: PivotSpec(rows: ["city"])) } catch { pivotInvalid = true }
     check("缺值字段被拒绝", pivotInvalid)
 
+    // R-PVT-02：生成的 SQL 拿到 SQL 抽屉里能复现同样的结果。
+    let pivotSpecForSQL = PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    )
+    let generatedSQL = try query.session.pivotSQL(spec: pivotSpecForSQL)
+    check("透视 SQL 是 SELECT 开头", generatedSQL.hasPrefix("SELECT "))
+    check("透视 SQL 查的是 data 视图", generatedSQL.contains("FROM \"data\""))
+    let replayed = try query.session.runSQL(generatedSQL)
+    check("复现结果行数一致", replayed.rowCount == pivotSum.rowCount)
+    func pairRows(_ rows: [[String?]]) -> Set<String> {
+        var pairs: Set<String> = []
+        for row in rows {
+            let label: String = row.first.flatMap { $0 } ?? ""
+            let value: String = row.count > 1 ? (row[1] ?? "") : ""
+            pairs.insert("\(label)=\(value)")
+        }
+        return pairs
+    }
+    check("复现结果与透视一致", pairRows(replayed.rows) == pairRows(pivotSum.rows))
+
+    // 带列维度的交叉表也要能复现，条件聚合那一段最容易拼错。
+    let crossSQL = try query.session.pivotSQL(spec: PivotSpec(
+        rows: ["city"],
+        columns: ["name"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    let crossReplay = try query.session.runSQL(crossSQL)
+    check("交叉表 SQL 复现列数一致", crossReplay.columns.count == pivotCross.columns.count)
+    check("交叉表 SQL 复现行数一致", crossReplay.rowCount == pivotCross.rowCount)
+
+    // 带筛选的透视，SQL 里也得带 WHERE。
+    let pivotSQLWithFilter = try query.session.pivotSQL(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)],
+        filter: FilterGroup(conditions: [FilterCondition(column: "city", op: .equal, value: "上海")])
+    ))
+    check("透视 SQL 带上筛选", pivotSQLWithFilter.contains("WHERE"))
+    let filteredReplay = try query.session.runSQL(pivotSQLWithFilter)
+    check("带筛选的复现只剩一行", filteredReplay.rowCount == 1)
+    check("带筛选的复现求和 1000", filteredReplay.rows.first?[1] == "1000")
+
     // 六种聚合都能跑，且口径对得上（R-PVT 2.2）
     func pivotSingle(_ aggregate: PivotAggregate) throws -> String? {
         let result = try query.session.pivot(spec: PivotSpec(
@@ -535,6 +577,35 @@ func run() throws {
     let emptyChart = ChartData.build(result: .empty, spec: chartSpec)
     check("空结果不画图", emptyChart.isEmpty && emptyChart.maxValue == 0)
     check("数值千分位格式", ChartData.format(12345.6789) == "12,345.68")
+
+    // 只有一个分组时也要画得出来，不能除零（R-VIZ-02）。
+    let singleRows: [[String?]] = [["上海", "100"]]
+    let singleResult = SQLResult(columns: manyColumns, rows: singleRows, rowCount: 1, elapsed: 0, truncated: false)
+    let single = ChartData.build(result: singleResult, spec: ChartSpec(kind: .pie, groupColumn: "k", value: PivotValue(column: "v")))
+    check("单分组画一个点", single.points.count == 1 && single.points[0].label == "上海")
+    check("单分组量级等于自身", abs(single.maxValue - 100) < 0.001)
+    check("单分组饼图占满 100%", abs(single.points[0].value / single.total - 1) < 0.0001)
+
+    // 先筛选再建图，只统计筛选结果（R-VIZ-03）。
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "上海")
+    ])))
+    let filteredChartResult = try query.session.pivot(spec: chartSpec.pivotSpec)
+    let filteredChart = ChartData.build(result: filteredChartResult, spec: chartSpec)
+    check("筛选后图表只剩一个分组", filteredChart.points.count == 1 && filteredChart.points[0].label == "上海")
+    let filteredSumSQL = try query.session.runSQL("SELECT sum(amount) FROM data WHERE city = '上海'")
+    let filteredSum = Double(filteredSumSQL.rows.first?[0] ?? "") ?? -1
+    check("筛选后图表数值等于筛选后求和", abs(filteredChart.total - filteredSum) < 0.001)
+    try query.session.apply(view: .empty)
+
+    // 筛到 0 行时给空图，由界面显示“没有匹配的数据”。
+    try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
+        FilterCondition(column: "city", op: .equal, value: "不存在的城市")
+    ])))
+    let noMatchResult = try query.session.pivot(spec: chartSpec.pivotSpec)
+    let noMatchChart = ChartData.build(result: noMatchResult, spec: chartSpec)
+    check("筛选到 0 行给空图", noMatchChart.isEmpty && noMatchResult.rowCount == 0)
+    try query.session.apply(view: .empty)
 
     // 一键分析：挑列、基数过滤、兜底
     let autoColumns = [
@@ -1194,10 +1265,13 @@ func run() throws {
     // 透视面板的落位规则（R-PVT 2.1、2.2）：拖进去、去重、换聚合、删掉。
     let draft = PivotDraft()
     check("透视空面板不能生成", !draft.canRun)
+    check("空面板提示至少放一个字段", draft.blockedHint == "至少放一个字段到行或值")
     draft.add("region", to: .rows)
     check("只拖行维度还不能生成", !draft.canRun)
+    check("只放行维度提示补值", draft.blockedHint == "至少放一个字段到值")
     draft.add("amount", to: .values)
     check("行加值可以生成", draft.canRun)
+    check("凑齐后不再提示", draft.blockedHint == nil)
     draft.add("region", to: .rows)
     check("同一字段重复拖入只留一份", draft.rows == ["region"])
     draft.add("channel", to: .columns)
@@ -1218,6 +1292,30 @@ func run() throws {
     draft.add("amount", to: .values)
     draft.remove("region", from: .rows)
     check("删掉行维度后不能生成", !draft.canRun && draft.rows.isEmpty)
+    check("删行后提示补值", draft.blockedHint == "把字段拖到行")
+
+    // 筛选区域（R-PVT-01）：拖进来一行一个条件，填了值才放行。
+    let filterDraft = PivotDraft()
+    filterDraft.add("city", to: .rows)
+    filterDraft.add("amount", to: .values)
+    filterDraft.add("city", to: .filter)
+    check("拖入筛选字段生成一条条件", filterDraft.filters.count == 1 && filterDraft.filters[0].op == .equal)
+    check("筛选没填值时不能生成", !filterDraft.canRun)
+    check("缺筛选值给提示", filterDraft.blockedHint == "筛选条件「city」还没填值")
+    filterDraft.setFilter(FilterCondition(column: "city", op: .equal, value: "上海"))
+    check("填了筛选值能生成", filterDraft.canRun)
+    check("筛选进 spec", filterDraft.spec.filter?.conditions.first?.value == "上海")
+    filterDraft.add("amount", to: .filter)
+    filterDraft.setFilter(FilterCondition(column: "amount", op: .greaterThan, value: "100"))
+    let filteredPivot = try query.session.pivot(spec: filterDraft.spec)
+    let filteredPivotSQL = try query.session.runSQL(
+        "SELECT city, sum(amount) FROM data WHERE city = '上海' AND amount > 100 GROUP BY city ORDER BY city"
+    )
+    check("透视筛选与手写 WHERE 一致", filteredPivot.rows == filteredPivotSQL.rows)
+    filterDraft.removeFilter(at: 0)
+    check("删筛选条件", filterDraft.filters.count == 1 && filterDraft.filters[0].column == "amount")
+    filterDraft.remove("amount", from: .filter)
+    check("筛选清空后 spec 不带筛选", filterDraft.filters.isEmpty && filterDraft.spec.filter == nil)
 
     // 缺值字段直接生成要被拒绝，面板里也能提前看出来（R-PVT 2.4）。
     let missingValueDraft = PivotDraft()

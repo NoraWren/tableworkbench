@@ -50,6 +50,10 @@ public final class FakeSession: QuerySession, @unchecked Sendable {
         SQLResult.empty
     }
 
+    public func pivotSQL(spec: PivotSpec) throws -> String {
+        "SELECT 1"
+    }
+
     public func runSQL(_ sql: String) throws -> SQLResult {
         SQLResult(
             columns: [ColumnInfo(name: "answer", displayName: "answer", typeName: "BIGINT", kind: .integer)],

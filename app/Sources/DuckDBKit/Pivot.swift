@@ -36,11 +36,19 @@ public struct PivotSpec: Hashable, Sendable {
     public var rows: [String]
     public var columns: [String]
     public var values: [PivotValue]
+    /// 透视自己的筛选条件，和表格上的筛选叠加。面板里的“筛选”区域拖进来的字段走这里。
+    public var filter: FilterGroup?
 
-    public init(rows: [String] = [], columns: [String] = [], values: [PivotValue] = []) {
+    public init(
+        rows: [String] = [],
+        columns: [String] = [],
+        values: [PivotValue] = [],
+        filter: FilterGroup? = nil
+    ) {
         self.rows = rows
         self.columns = columns
         self.values = values
+        self.filter = filter
     }
 
     public var isValid: Bool {

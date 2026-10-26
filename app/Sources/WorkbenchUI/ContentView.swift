@@ -191,10 +191,21 @@ struct ContentView: View {
                         }
                         .help("拖拽字段生成透视表")
                         .popover(isPresented: $popover.pivotShown, arrowEdge: .bottom) {
-                            PivotPanel(columns: entry.columns) { spec in
-                                model.runPivot(entryID: entry.id, spec: spec)
-                                popover.pivotShown = false
-                            }
+                            PivotPanel(
+                                columns: entry.columns,
+                                onRun: { spec in
+                                    model.runPivot(entryID: entry.id, spec: spec)
+                                    popover.pivotShown = false
+                                },
+                                onShowSQL: { spec in
+                                    model.makePivotSQL(entryID: entry.id, spec: spec) { sql in
+                                        guard let sql else { return }
+                                        self.sql.text = sql
+                                        self.sqlShown = true
+                                        popover.pivotShown = false
+                                    }
+                                }
+                            )
                         }
 
                         Button {

@@ -42,10 +42,18 @@ func sampleResult(rowCount: Int, truncated: Bool, elapsed: Double) -> SQLResult 
 func render<Content: View>(
     _ name: String,
     size: NSSize,
+    dark: Bool = false,
     @ViewBuilder content: () -> Content
 ) throws {
     let host = NSHostingView(rootView: content())
     host.frame = NSRect(origin: .zero, size: size)
+    if dark {
+        // 深色模式靠外观换，不是靠 colorScheme 环境值，Canvas 里取到的次要色才跟着变。
+        host.appearance = NSAppearance(named: .darkAqua)
+        // 离屏视图自己不画背景，真实窗口才有深色底，这里补一层才看得出对比度。
+        host.wantsLayer = true
+        host.layer?.backgroundColor = NSColor(calibratedWhite: 0.13, alpha: 1).cgColor
+    }
 
     let window = NSWindow(
         contentRect: NSRect(origin: .zero, size: size),
@@ -97,6 +105,34 @@ MainActor.assumeIsolated {
         try render("filter", size: NSSize(width: 560, height: 320)) {
             FilterPanel(columns: columns, initial: nil) { _ in }
         }
+        // 四个区域齐全、带一个筛选条件的透视面板（R-PVT-01）。
+        try render("pivot-filter", size: NSSize(width: 560, height: 540)) {
+            PivotPanel(
+                columns: columns,
+                draft: {
+                    let draft = PivotDraft()
+                    draft.add("区域", to: .rows)
+                    draft.add("金额", to: .values)
+                    draft.add("渠道", to: .filter)
+                    draft.setFilter(FilterCondition(column: "渠道", op: .contains, value: "线上"))
+                    return draft
+                }()
+            ) { _ in }
+        }
+        // 带“查看 SQL”的完整面板：确认新按钮和“生成透视”并排不挤（R-PVT-02）。
+        try render("pivot-sql", size: NSSize(width: 560, height: 460)) {
+            PivotPanel(
+                columns: columns,
+                draft: {
+                    let draft = PivotDraft()
+                    draft.add("区域", to: .rows)
+                    draft.add("金额", to: .values)
+                    return draft
+                }(),
+                onRun: { _ in },
+                onShowSQL: { _ in }
+            )
+        }
         try render("sql-editor", size: NSSize(width: 760, height: 220)) {
             SQLEditor(
                 state: SQLState(),
@@ -121,6 +157,64 @@ MainActor.assumeIsolated {
         }
         try render("settings", size: NSSize(width: 520, height: 320)) {
             SettingsView()
+        }
+
+        // 四种图各来一张，确认 Canvas 画得出来、标题与图例不打架（R-VIZ-01）。
+        let chartPoints = [
+            ChartPoint(label: "华南", value: 5120),
+            ChartPoint(label: "华东", value: 4380),
+            ChartPoint(label: "华北", value: 2960),
+            ChartPoint(label: "西南", value: 1740),
+            ChartPoint(label: "东北", value: 860)
+        ]
+        func chartData(_ kind: ChartKind) -> ChartData {
+            ChartData(
+                kind: kind,
+                title: "区域 · 金额 求和",
+                points: kind == .line
+                    ? chartPoints.sorted { $0.label < $1.label }
+                    : chartPoints,
+                total: chartPoints.reduce(0) { $0 + $1.value },
+                maxValue: chartPoints.map(\.value).max() ?? 0,
+                elapsed: 0.074,
+                groupCount: chartPoints.count
+            )
+        }
+        for kind in ChartKind.allCases {
+            try render("chart-" + kind.rawValue, size: NSSize(width: 720, height: 360)) {
+                ChartView(data: chartData(kind)) {}
+            }
+        }
+        // 深色模式：柱、网格线、文字都要还看得清（R-VIZ-04）。
+        try render("chart-bar-dark", size: NSSize(width: 720, height: 360), dark: true) {
+            ChartView(data: chartData(.bar)) {}
+        }
+        // 单分组与空结果两种边界。
+        try render("chart-single", size: NSSize(width: 720, height: 360)) {
+            ChartView(
+                data: ChartData(
+                    kind: .bar,
+                    title: "城市 · 金额 求和",
+                    points: [ChartPoint(label: "上海", value: 100)],
+                    total: 100,
+                    maxValue: 100,
+                    elapsed: 0.012,
+                    groupCount: 1
+                )
+            ) {}
+        }
+        try render("chart-empty", size: NSSize(width: 720, height: 320)) {
+            ChartView(
+                data: ChartData(
+                    kind: .bar,
+                    title: "区域 · 金额 求和",
+                    points: [],
+                    total: 0,
+                    maxValue: 0,
+                    elapsed: 0.004,
+                    groupCount: 0
+                )
+            ) {}
         }
     } catch {
         let message = "渲染失败：" + String(describing: error) + "\n"

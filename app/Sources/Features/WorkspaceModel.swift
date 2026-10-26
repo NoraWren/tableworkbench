@@ -532,6 +532,34 @@ public final class WorkspaceModel: ObservableObject {
         resultTitle = nil
     }
 
+    /// 把透视配置翻译成 SQL 交给界面，用户可以在 SQL 抽屉里改着用。
+    /// 生成和执行是同一份拼装逻辑，复现出来的结果与透视结果一致。
+    public func makePivotSQL(entryID: UUID, spec: PivotSpec, completion: @escaping @MainActor (String?) -> Void) {
+        guard let entry = entries.first(where: { $0.id == entryID }) else {
+            completion(nil)
+            return
+        }
+        let session = entry.session
+        Task {
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (String?, ImportError?) in
+                do {
+                    return (try session.pivotSQL(spec: spec), nil)
+                } catch let importError as ImportError {
+                    return (nil, importError)
+                } catch {
+                    return (nil, ImportError.wrap(error, step: "生成透视 SQL"))
+                }
+            }.value
+
+            if let sql = outcome.0 {
+                completion(sql)
+            } else {
+                error = outcome.1
+                completion(nil)
+            }
+        }
+    }
+
     public func closeSelected() {
         guard let selection, let index = entries.firstIndex(where: { $0.id == selection }) else { return }
         entries[index].session.close()
