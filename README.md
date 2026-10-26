@@ -36,6 +36,14 @@ TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx file
 
 不做单元格编辑，不做公式，不做仪表盘和多图联动，不做协作，不做云同步。它是分析器，不是表格编辑器。
 
+## 为什么不用 Excel
+
+Excel 打开这种规模的文件要等好几分钟，滚动时还要反复重算。它擅长改数据，不擅长看数据。这个工具只做后者：秒开、随便滚、想查什么写一条 SQL。
+
+## 安装
+
+目前还没有签名的公开版本，dmg 在本地构建后位于 `build/`；正式发布后从 GitHub Releases 下载即可。没有 Developer ID 签名的包会被 Gatekeeper 拦下，第一次需要右键打开。
+
 ## 构建
 
 需要 macOS 14+ 和 Swift 6。
@@ -71,3 +79,7 @@ TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx file
 ## 许可证
 
 Apache License 2.0，见 [LICENSE](LICENSE)。第三方依赖的许可证登记在 [docs/third-party.md](docs/third-party.md)。
+
+## 参与
+
+提 issue、发 PR 之前先看 [CONTRIBUTING.md](CONTRIBUTING.md)。需求文档在 [docs/requirements](docs/requirements)，改动提案在 [openspec/changes](openspec/changes)；提 PR 时请说明动的是哪个需求编号。
