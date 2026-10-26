@@ -127,6 +127,8 @@ public final class CompletionTextView: NSTextView {
     public var suggestions: [String] { candidates }
     /// 当前选中的候选序号。
     public var selectedSuggestion: Int { popup?.selectedIndex ?? 0 }
+    /// 弹窗在屏幕上的位置，测试定位用。不可见时为 nil。
+    public var suggestingFrame: NSRect? { popup?.frame }
 
     public override func keyDown(with event: NSEvent) {
         if popup != nil {
@@ -189,25 +191,35 @@ public final class CompletionTextView: NSTextView {
 
     /// 贴在光标下方；下方放不下就翻到上方，并夹在可见范围内。
     private func position(_ popup: CompletionPopup) {
-        guard let window, let layoutManager, let textContainer else { return }
-        let caret = selectedRange().location
-        let glyphRange = layoutManager.glyphRange(
-            forCharacterRange: NSRange(location: caret, length: 0),
-            actualCharacterRange: nil
-        )
-        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-        rect.origin.x += textContainerInset.width
-        rect.origin.y += textContainerInset.height
-        let inView = convert(rect, to: nil)
-        let screenRect = window.convertToScreen(inView)
+        guard let window, let caretRect = caretScreenRect() else { return }
 
         let size = popup.frame.size
-        var origin = NSPoint(x: screenRect.minX, y: screenRect.minY - size.height - 2)
+        var origin = NSPoint(x: caretRect.minX, y: caretRect.minY - size.height - 2)
+        // 下方放不下就翻到上方；再夹进屏幕，免得半截露在窗口外。
         if origin.y < (window.screen?.visibleFrame.minY ?? 0) {
-            origin.y = screenRect.maxY + 2
+            origin.y = caretRect.maxY + 2
+        }
+        if let visible = window.screen?.visibleFrame {
+            origin.x = min(max(origin.x, visible.minX), visible.maxX - size.width)
+            origin.y = min(max(origin.y, visible.minY), visible.maxY - size.height)
         }
         popup.setFrameOrigin(origin)
         popup.orderFront(nil)
+    }
+
+    /// 光标在屏幕坐标里的矩形。
+    ///
+    /// 不用布局引擎的 boundingRect 算：光标停在文本末尾时那个范围是零长度，
+    /// 取出来是空矩形，弹窗会跑到编辑器左下角。firstRect 走的是输入法那一套，
+    /// 对空选区也给出所在行的矩形。
+    private func caretScreenRect() -> NSRect? {
+        var actual = NSRange()
+        let rect = firstRect(
+            forCharacterRange: NSRange(location: selectedRange().location, length: 0),
+            actualRange: &actual
+        )
+        guard rect.origin.x.isFinite, rect.origin.y.isFinite, rect.height > 0 else { return nil }
+        return rect
     }
 
     private func acceptSelected() {

@@ -1018,6 +1018,23 @@ func run() throws {
     completionView.refreshCompletion()
     check("弹窗在输入前缀后出现", completionView.isSuggesting)
     check("弹窗候选含 SELECT", completionView.suggestions.contains("SELECT"))
+
+    // 弹窗要贴着光标，不能落到编辑器左下角。
+    let caretRect = completionView.firstRect(
+        forCharacterRange: NSRange(location: 3, length: 0),
+        actualRange: nil
+    )
+    if let popupFrame = completionView.suggestingFrame {
+        check("弹窗横向贴住光标", abs(popupFrame.minX - caretRect.minX) < 2)
+        check(
+            "弹窗纵向贴着光标行",
+            popupFrame.maxY <= caretRect.minY + 1 || popupFrame.minY >= caretRect.maxY - 1
+        )
+    } else {
+        check("弹窗横向贴住光标", false)
+        check("弹窗纵向贴着光标行", false)
+    }
+
     completionView.acceptSuggestion(at: 0)
     check("Tab 接受后补成 SELECT", completionView.string == "SELECT")
     check("接受后弹窗收起", !completionView.isSuggesting)
