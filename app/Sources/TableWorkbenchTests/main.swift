@@ -6,6 +6,7 @@ import DuckDBKit
 import Features
 import DataGrid
 import SQLEditorUI
+import WorkbenchUI
 import SwiftUI
 
 var failures = 0
@@ -1189,6 +1190,80 @@ func run() throws {
     for window in [completionWindow, commentWindow, literalWindow, clearWindow, qualifiedWindow] {
         window.close()
     }
+
+    // 透视面板的落位规则（R-PVT 2.1、2.2）：拖进去、去重、换聚合、删掉。
+    let draft = PivotDraft()
+    check("透视空面板不能生成", !draft.canRun)
+    draft.add("region", to: .rows)
+    check("只拖行维度还不能生成", !draft.canRun)
+    draft.add("amount", to: .values)
+    check("行加值可以生成", draft.canRun)
+    draft.add("region", to: .rows)
+    check("同一字段重复拖入只留一份", draft.rows == ["region"])
+    draft.add("channel", to: .columns)
+    draft.add("amount", to: .values)
+    check("值字段不重复", draft.values.count == 1)
+    check("透视草稿转成 spec", draft.spec.rows == ["region"] && draft.spec.columns == ["channel"])
+    check("值字段默认求和", draft.values[0].aggregate == PivotAggregate.sum)
+    draft.setAggregate(.average, for: "amount")
+    check("换聚合方式生效", draft.values[0].aggregate == PivotAggregate.average)
+    check("换聚合不改顺序", draft.values[0].column == "amount")
+    draft.setAggregate(.maximum, for: "not-there")
+    check("换不存在的字段不报错", draft.values[0].aggregate == PivotAggregate.average)
+    draft.remove("channel", from: .columns)
+    check("移除列维度", draft.columns.isEmpty)
+    draft.add("channel", to: .columns)
+    draft.removeValue(at: 0)
+    check("删掉值字段后不能生成", !draft.canRun && draft.values.isEmpty)
+    draft.add("amount", to: .values)
+    draft.remove("region", from: .rows)
+    check("删掉行维度后不能生成", !draft.canRun && draft.rows.isEmpty)
+
+    // 缺值字段直接生成要被拒绝，面板里也能提前看出来（R-PVT 2.4）。
+    let missingValueDraft = PivotDraft()
+    missingValueDraft.add("region", to: .rows)
+    check("只有行维度时面板禁用生成", !missingValueDraft.canRun)
+    var missingRejected = false
+    do {
+        _ = try query.session.pivot(spec: missingValueDraft.spec)
+    } catch {
+        missingRejected = true
+    }
+    check("缺值字段的透视被拒绝", missingRejected)
+
+    // 拖动落位落到真实的透视查询上，结果能出来（R-PVT 2.1、2.3）。
+    let wired = PivotDraft()
+    wired.add("city", to: .rows)
+    wired.add("amount", to: .values)
+    let wiredResult = try query.session.pivot(spec: wired.spec)
+    check("面板选的行与值能出结果", wiredResult.rowCount == 3)
+    check("结果列名带聚合方式", wiredResult.columns.last?.displayName.contains("求和") == true)
+    check("结果带上耗时", wiredResult.elapsed >= 0)
+
+    // SQL 结果的截断与空结果提示（R-SQL 2.3）。
+    let normalStatus = SQLResultStatus(
+        result: SQLResult(columns: [], rows: [], rowCount: 12, elapsed: 0.031, truncated: false),
+        title: "查询结果"
+    )
+    check("普通结果无截断提示", normalStatus.truncationNotice == nil)
+    check("普通结果不显示空占位", normalStatus.emptyPlaceholder == nil)
+    check("结果摘要含行数与耗时", normalStatus.summary == "12 行 · 0.03 秒")
+
+    let truncatedStatus = SQLResultStatus(
+        result: SQLResult(columns: [], rows: [], rowCount: 100_000, elapsed: 1.2, truncated: true),
+        title: "查询结果"
+    )
+    check("截断结果给提示", truncatedStatus.truncationNotice == "只显示前 100,000 行")
+    check("截断结果不显示空占位", truncatedStatus.emptyPlaceholder == nil)
+
+    let emptyStatus = SQLResultStatus(
+        result: SQLResult(columns: [], rows: [], rowCount: 0, elapsed: 0.012, truncated: false),
+        title: "查询结果"
+    )
+    check("空结果显示占位", emptyStatus.emptyPlaceholder == "0 行")
+    check("空结果不给截断提示", emptyStatus.truncationNotice == nil)
+    check("摘要五位数加千分位", SQLResultStatus.grouped(1234567) == "1,234,567")
+    check("摘要三位数不加分隔", SQLResultStatus.grouped(999) == "999")
 }
 
 do {
