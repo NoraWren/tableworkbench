@@ -932,6 +932,68 @@ func run() throws {
     check("复制不带表头", NSPasteboard.general.string(forType: .string) == "a\tb")
     UserDefaults.standard.set(true, forKey: "copyIncludesHeader")
 
+    // 大范围复制的确认规则（R-EXP-04）。阈值是“超过”一万，正好一万不打扰。
+    check("一万行以内不弹框", !CopyConfirmation.needsConfirmation(rowCount: 10_000))
+    check("一万零一行弹框", CopyConfirmation.needsConfirmation(rowCount: 10_001))
+    check("确认框写出行数", CopyConfirmation.title(rowCount: 12_345).contains("12,345") == false
+        && CopyConfirmation.title(rowCount: 12_345).contains("12345"))
+
+    // 真的走一遍 GridTableView.copy 的分支：取消时剪贴板保持原样。
+    let manySource = GridDataSource()
+    manySource.configure(
+        columns: [
+            ColumnInfo(name: "A", displayName: "A", typeName: "VARCHAR", kind: .text),
+            ColumnInfo(name: "B", displayName: "B", typeName: "VARCHAR", kind: .text)
+        ],
+        rowCount: 10_001,
+        provider: { offset, size in
+            let start = max(0, min(offset, 10_001))
+            let end = max(start, min(offset + size, 10_001))
+            let rows = (start..<end).map { ["r\($0)", "v\($0)"] as [String?] }
+            return TableBlock(offset: start, rows: rows)
+        }
+    )
+    let manyTable = GridTableView()
+    manyTable.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+    manyTable.dataSource = manySource
+    manyTable.delegate = manySource
+    manyTable.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("A")))
+    manyTable.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("B")))
+    manyTable.reloadData()
+    // 不在窗口里时 selectAll 会按可见区域算，直接指定整个区间。
+    manyTable.selectRowIndexes(IndexSet(integersIn: 0..<10_001), byExtendingSelection: false)
+
+    var askedRowCount: Int?
+    manyTable.confirmCopy = { count in
+        askedRowCount = count
+        return false
+    }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString("原有内容", forType: .string)
+    manyTable.copy(nil)
+    check("选一万行以上先问", askedRowCount == 10_001)
+    check("取消后剪贴板不动", NSPasteboard.general.string(forType: .string) == "原有内容")
+
+    var acceptedCount: Int?
+    manyTable.confirmCopy = { count in
+        acceptedCount = count
+        return true
+    }
+    manyTable.copy(nil)
+    check("确认后写入剪贴板", acceptedCount == 10_001
+        && NSPasteboard.general.string(forType: .string)?.hasPrefix("A\tB") == true
+        && NSPasteboard.general.string(forType: .string)?.contains("r10000\tv10000") == true)
+
+    // 小范围复制不该触发确认。
+    var smallAsked = false
+    gridTable.confirmCopy = { _ in
+        smallAsked = true
+        return false
+    }
+    gridTable.copy(nil)
+    check("小范围复制不问", !smallAsked && NSPasteboard.general.string(forType: .string) == "A\tB\na\tb")
+    gridTable.confirmCopy = nil
+
     // SQL 历史
     let historySuite = "tableworkbench.history.\(UUID().uuidString)"
     let historyDefaults = UserDefaults(suiteName: historySuite)!
