@@ -320,6 +320,7 @@ struct ContentView: View {
         }
         .onChange(of: model.selection) { _, _ in configureCommands() }
         .onChange(of: model.isRunningSQL) { _, _ in configureCommands() }
+        .onChange(of: model.isAnalyzing) { _, _ in configureCommands() }
         .onReceive(model.$entries) { _ in configureCommands() }
     }
 
@@ -329,6 +330,7 @@ struct ContentView: View {
         bus.canExport = bus.hasFile
         bus.canRunSQL = bus.hasFile && !model.isRunningSQL
         bus.hasSQLText = !sql.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        bus.canAnalyze = bus.hasFile && !model.isAnalyzing
         bus.open = { openPanel() }
         bus.export = {
             if let entry = model.selectedEntry { exportPanel(entry: entry) }
@@ -342,6 +344,11 @@ struct ContentView: View {
         bus.newQuery = {
             sql.text = "SELECT * FROM data LIMIT 100"
             sqlShown = true
+        }
+        bus.analyze = {
+            if let entry = model.selectedEntry {
+                model.runAutoAnalysis(entryID: entry.id)
+            }
         }
     }
 

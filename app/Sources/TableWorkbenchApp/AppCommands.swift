@@ -9,12 +9,14 @@ final class CommandBus: ObservableObject {
     @Published var canExport = false
     @Published var canRunSQL = false
     @Published var hasSQLText = false
+    @Published var canAnalyze = false
 
     var open: () -> Void = {}
     var export: () -> Void = {}
     var closeFile: () -> Void = {}
     var runSQL: () -> Void = {}
     var newQuery: () -> Void = {}
+    var analyze: () -> Void = {}
 
     private init() {}
 }
@@ -53,6 +55,10 @@ struct QueryCommands: Commands {
             Button("新建查询") { bus.newQuery() }
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(!bus.hasFile)
+            Divider()
+            Button("一键分析") { bus.analyze() }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(!bus.canAnalyze)
         }
     }
 }

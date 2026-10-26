@@ -642,6 +642,14 @@ func run() throws {
     check("xlsx 布尔显示", try xlsx.session.block(offset: 1, size: 1).rows.first?[3] == "FALSE")
     check("xlsx 不导入第二张表", try xlsx.session.block(offset: 0, size: 4).rows.allSatisfy { $0.first != "华东" })
 
+    // 工作表太多时拒绝全部导入，避免一点就卡几分钟
+    let manySheets = MainActor.assumeIsolated { WorkspaceModel() }
+    MainActor.assumeIsolated {
+        manySheets.open(url: fixture, sheetNames: (1...21).map { "表\($0)" })
+    }
+    check("超过 20 张工作表被拒绝", MainActor.assumeIsolated { manySheets.error?.userMessage == "工作表太多了" })
+    check("拒绝时不进左栏", MainActor.assumeIsolated { manySheets.entries.isEmpty })
+
     var xlsxCached: URL?
     for _ in 0..<100 {
         if let found = ParquetCache.shared.cachedURL(for: fixture, variant: "xlsx:数据") {

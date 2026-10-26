@@ -136,6 +136,15 @@ public final class WorkspaceModel: ObservableObject {
 
     /// 把一个工作簿里的多个工作表一次全部打开，每个工作表单独一条。
     public func open(url: URL, sheetNames: [String]) {
+        // 工作表很多时逐个转换很慢，先让用户单选，避免一点就卡住几分钟。
+        guard sheetNames.count <= 20 else {
+            error = ImportError(
+                userMessage: "工作表太多了",
+                technicalDetail: "共 \(sheetNames.count) 个",
+                recoverySuggestion: "先单独打开需要的那一个，或者用 Excel 拆成几个文件。"
+            )
+            return
+        }
         let requests = sheetNames.map { (url, Optional($0)) }
         open(requests: requests)
     }
