@@ -49,9 +49,13 @@ public struct ColumnStats: Sendable {
     public let timeBuckets: [TimeBucket]
     public let numericCount: Int
     public let nonNumericExamples: [String]
+    /// 文本列类型冲突的抽样行数。大表不扫全表，这个值非空时界面要标“抽样”。
+    public let numericSampleRows: Int?
     public let minLength: Int?
     public let maxLength: Int?
     public let whitespaceCount: Int?
+    /// 去重值是不是近似值。大表用 approx_count_distinct 时会标上，界面必须显示“近似”。
+    public let distinctIsApproximate: Bool
 
     public init(
         column: String,
@@ -70,9 +74,11 @@ public struct ColumnStats: Sendable {
         timeBuckets: [TimeBucket] = [],
         numericCount: Int = 0,
         nonNumericExamples: [String] = [],
+        numericSampleRows: Int? = nil,
         minLength: Int? = nil,
         maxLength: Int? = nil,
-        whitespaceCount: Int? = nil
+        whitespaceCount: Int? = nil,
+        distinctIsApproximate: Bool = false
     ) {
         self.column = column
         self.typeName = typeName
@@ -90,9 +96,11 @@ public struct ColumnStats: Sendable {
         self.timeBuckets = timeBuckets
         self.numericCount = numericCount
         self.nonNumericExamples = nonNumericExamples
+        self.numericSampleRows = numericSampleRows
         self.minLength = minLength
         self.maxLength = maxLength
         self.whitespaceCount = whitespaceCount
+        self.distinctIsApproximate = distinctIsApproximate
     }
 
     public var conflictCount: Int {
@@ -101,6 +109,29 @@ public struct ColumnStats: Sendable {
 
     public var nullRate: Double {
         totalRows == 0 ? 0 : Double(nullCount) / Double(totalRows)
+    }
+
+    /// 时间跨度：只在日期或时间列、且最早最晚都能解析时给出秒数。
+    public var timeSpan: TimeInterval? {
+        guard kind == .date || kind == .timestamp,
+              let minValue, let maxValue,
+              let lower = ColumnStats.parseTemporal(minValue),
+              let upper = ColumnStats.parseTemporal(maxValue) else { return nil }
+        return upper.timeIntervalSince(lower)
+    }
+
+    /// DuckDB 的日期是 2026-01-01，时间戳是 2026-01-01 10:00:00，两种都认。
+    static func parseTemporal(_ text: String) -> Date? {
+        let withTime = DateFormatter()
+        withTime.locale = Locale(identifier: "en_US_POSIX")
+        withTime.timeZone = TimeZone(secondsFromGMT: 0)
+        withTime.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        if let date = withTime.date(from: text) { return date }
+        let dayOnly = DateFormatter()
+        dayOnly.locale = Locale(identifier: "en_US_POSIX")
+        dayOnly.timeZone = TimeZone(secondsFromGMT: 0)
+        dayOnly.dateFormat = "yyyy-MM-dd"
+        return dayOnly.date(from: String(text.prefix(10)))
     }
 }
 

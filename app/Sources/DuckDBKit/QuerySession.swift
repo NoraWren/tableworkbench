@@ -20,6 +20,8 @@ public protocol QuerySession: AnyObject, Sendable {
     func pivotSQL(spec: PivotSpec) throws -> String
     /// 统计一列。源表跟随当前筛选。
     func columnStats(column: String) throws -> ColumnStats
+    /// 检查器累计发出的 SQL 条数，缓存命中不增加。替身会话不需要，默认 0。
+    var statsQueryCount: Int { get }
     /// 一列有多少个不同取值，用于挑分组维度。
     func distinctCount(column: String) throws -> Int
     /// 导出当前视图，返回导出行数。
@@ -35,6 +37,8 @@ public protocol QuerySession: AnyObject, Sendable {
 }
 
 public extension QuerySession {
+    var statsQueryCount: Int { 0 }
+
     /// 默认实现退回全量列，替身会话和测试用不上按列裁剪。
     func block(offset: Int, size: Int, columns: [ColumnInfo]) throws -> TableBlock {
         try block(offset: offset, size: size)

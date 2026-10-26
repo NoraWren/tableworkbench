@@ -39,6 +39,7 @@ var sqlStatement: String?
 var warmCache = false
 var pivotBench = false
 var statsColumn: String?
+var printValues = false
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
@@ -79,6 +80,9 @@ while argumentIndex < arguments.count {
         } else {
             argumentIndex += 1
         }
+    case "--values":
+        printValues = true
+        argumentIndex += 1
     case "--filter":
         if argumentIndex + 1 < arguments.count, let separator = arguments[argumentIndex + 1].firstIndex(of: "=") {
             let pair = arguments[argumentIndex + 1]
@@ -136,6 +140,11 @@ do {
     if let sqlStatement {
         let result = try opened.session.runSQL(sqlStatement)
         print("SQL: \(result.rowCount) 行, \(String(format: "%.3f", result.elapsed)) 秒, 截断: \(result.truncated)")
+        if printValues {
+            for row in result.rows.prefix(12) {
+                print("  " + row.map { $0 ?? "NULL" }.joined(separator: " | "))
+            }
+        }
         exit(0)
     }
 

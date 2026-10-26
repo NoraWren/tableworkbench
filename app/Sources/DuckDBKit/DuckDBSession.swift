@@ -9,11 +9,15 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public private(set) var generation: Int = 0
     /// 行数 × 列数超过这个值就保留 Parquet 视图，否则物化。测试里会调小来覆盖视图分支。
     public static var parquetViewCellThreshold = 20_000_000
+    /// 文本列类型冲突检查的抽样门槛，非空行超过它就只扫前这么多行。测试里会调小来覆盖抽样分支。
+    public static var textProbeSampleThreshold = 200_000
     private var view: QueryView = .empty
     private var hasResultTable = false
     private var computedColumns: [(name: String, expression: String)] = []
     /// 按列缓存统计，配 generation 判断是否失效。
     private var statsCache: [String: (generation: Int, stats: ColumnStats)] = [:]
+    /// 检查器累计发出的 SQL 条数，缓存命中不增加。测试用它确认切回已算过的列不再查库。
+    public private(set) var statsQueryCount = 0
     private var distinctCache: [String: (generation: Int, count: Int)] = [:]
     private var database: Database?
     private var connection: Connection?
@@ -300,36 +304,80 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         let table = hasResultTable ? "\"__result\"" : "\"__base\""
         let identifier = SQLBuilder.quoteIdentifier(column)
         let numeric = "TRY_CAST(\(identifier) AS DOUBLE)"
+        let rowCountOrResult = hasResultTable ? resultCount : rowCount
+        // 检查器发出的每条 SQL 都过这里，缓存命中时一条都不加，用来验证切列不重复查库。
+        func statsQuery(_ sql: String) throws -> ResultSet {
+            statsQueryCount += 1
+            return try connection.query(sql)
+        }
+        // TW_STATS_TIMING 打开时把每段查询的耗时写到 stderr，bench 里用来定位瓶颈。
+        let reportTiming = ProcessInfo.processInfo.environment["TW_STATS_TIMING"] != nil
+        let totalStart = Foundation.Date()
+        var phaseStart = totalStart
+        func mark(_ label: String) {
+            guard reportTiming else { return }
+            let now = Foundation.Date()
+            let line = String(format: "[stats] %@ %.3f 秒 (累计 %.3f)\n", label, now.timeIntervalSince(phaseStart), now.timeIntervalSince(totalStart))
+            FileHandle.standardError.write(Data(line.utf8))
+            phaseStart = now
+        }
 
         do {
-            var aggregateSelect = """
-            SELECT count(*), count(\(identifier)), count(DISTINCT \(identifier)),
-                   CAST(min(\(identifier)) AS VARCHAR), CAST(max(\(identifier)) AS VARCHAR),
-                   avg(\(numeric)), median(\(numeric)), stddev_pop(\(numeric))
-            """
-            if info.kind == .text {
-                aggregateSelect += ",\n                   min(length(\(identifier))), max(length(\(identifier))),\n                   count(*) FILTER (WHERE \(identifier) <> trim(\(identifier)))"
+            // 数值聚合只给数值列拼：文本列上 median(TRY_CAST(x AS DOUBLE)) 会把整列
+            // 转成 DOUBLE 再排序，1017 万行实测多花 0.4 秒，而文本列的均值中位数本来就该是空的。
+            var aggregateTerms = [
+                "count(*)",
+                "count(\(identifier))",
+                "count(DISTINCT \(identifier))",
+                "CAST(min(\(identifier)) AS VARCHAR)",
+                "CAST(max(\(identifier)) AS VARCHAR)"
+            ]
+            if info.kind.isNumeric {
+                aggregateTerms += ["avg(\(numeric))", "median(\(numeric))", "stddev_pop(\(numeric))"]
             }
-            aggregateSelect += "\nFROM \(table)"
-            let aggregate = try connection.query(aggregateSelect)
+            if info.kind == .text {
+                aggregateTerms += [
+                    "min(length(\(identifier)))",
+                    "max(length(\(identifier)))",
+                    "count(*) FILTER (WHERE \(identifier) <> trim(\(identifier)))"
+                ]
+            }
+            let aggregateSelect = "SELECT " + aggregateTerms.joined(separator: ", ") + " FROM \(table)"
+            let aggregate = try statsQuery(aggregateSelect)
+            mark("聚合")
             let total = Int(aggregate.column(at: 0).cast(to: Int64.self)[0] ?? 0)
             let nonNull = Int(aggregate.column(at: 1).cast(to: Int64.self)[0] ?? 0)
             let distinct = Int(aggregate.column(at: 2).cast(to: Int64.self)[0] ?? 0)
             let minValue = aggregate.column(at: 3).cast(to: String.self)[0]
             let maxValue = aggregate.column(at: 4).cast(to: String.self)[0]
-            let mean = aggregate.column(at: 5).cast(to: Double.self)[0]
-            let median = aggregate.column(at: 6).cast(to: Double.self)[0]
-            let deviation = aggregate.column(at: 7).cast(to: Double.self)[0]
-            let minLength = info.kind == .text ? Int(aggregate.column(at: 8).cast(to: Int64.self)[0] ?? 0) : nil
-            let maxLength = info.kind == .text ? Int(aggregate.column(at: 9).cast(to: Int64.self)[0] ?? 0) : nil
-            let whitespaceCount = info.kind == .text ? Int(aggregate.column(at: 10).cast(to: Int64.self)[0] ?? 0) : nil
+            var nextColumn = 5
+            var mean: Double?
+            var median: Double?
+            var deviation: Double?
+            if info.kind.isNumeric {
+                mean = aggregate.column(at: DBInt(nextColumn)).cast(to: Double.self)[0]
+                median = aggregate.column(at: DBInt(nextColumn + 1)).cast(to: Double.self)[0]
+                deviation = aggregate.column(at: DBInt(nextColumn + 2)).cast(to: Double.self)[0]
+                nextColumn += 3
+            }
+            var minLength: Int?
+            var maxLength: Int?
+            var whitespaceCount: Int?
+            if info.kind == .text {
+                minLength = Int(aggregate.column(at: DBInt(nextColumn)).cast(to: Int64.self)[0] ?? 0)
+                maxLength = Int(aggregate.column(at: DBInt(nextColumn + 1)).cast(to: Int64.self)[0] ?? 0)
+                whitespaceCount = Int(aggregate.column(at: DBInt(nextColumn + 2)).cast(to: Int64.self)[0] ?? 0)
+            }
 
             var topValues: [TopValue] = []
-            let top = try connection.query("""
+            // 按原列分组、只在输出时转字符串：GROUP BY CAST(x AS VARCHAR) 要把 1000 万行
+            // 全部转成字符串再做哈希分组，金额列实测 0.41 秒，按原列分组只要 0.28 秒。
+            let top = try statsQuery("""
             SELECT CAST(\(identifier) AS VARCHAR) AS v, count(*) AS c
             FROM \(table) WHERE \(identifier) IS NOT NULL
-            GROUP BY 1 ORDER BY 2 DESC, 1 ASC LIMIT 10
+            GROUP BY \(identifier) ORDER BY 2 DESC, 1 ASC LIMIT 10
             """)
+            mark("top-values")
             let topValueColumn = top.column(at: 0).cast(to: String.self)
             let topCountColumn = top.column(at: 1).cast(to: Int64.self)
             for index in 0..<Int(top.rowCount) {
@@ -343,18 +391,22 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             if info.kind.isNumeric, let minValue, let maxValue,
                let lower = Double(minValue), let upper = Double(maxValue), upper > lower {
                 let step = (upper - lower) / 20
-                let bucketQuery = try connection.query("""
-                SELECT least(19, greatest(0, CAST(floor((\(numeric) - \(lower)) / \(step)) AS INTEGER))) AS b, count(*)
+                // 桶号必须返回 BIGINT：duckdb-swift 用 cast(to: Int64.self) 读 INTEGER 会全读成 nil，
+                // 那些行会被当成第 0 桶，整列数据挤在一根柱子上。
+                let bucketQuery = try statsQuery("""
+                SELECT CAST(least(19, greatest(0, CAST(floor((\(numeric) - \(lower)) / \(step)) AS INTEGER))) AS BIGINT) AS b, count(*)
                 FROM \(table) WHERE \(identifier) IS NOT NULL AND \(numeric) IS NOT NULL
                 GROUP BY b ORDER BY b
                 """)
+                mark("直方图")
                 var counts = Array(repeating: 0, count: 20)
                 let bucketColumn = bucketQuery.column(at: 0).cast(to: Int64.self)
                 let countColumn = bucketQuery.column(at: 1).cast(to: Int64.self)
                 for index in 0..<Int(bucketQuery.rowCount) {
                     let bucket = Int(bucketColumn[DBInt(index)] ?? 0)
                     let count = Int(countColumn[DBInt(index)] ?? 0)
-                    let clamped = min(19, max(0, bucket - 1))
+                    // SQL 已经用 least/greatest 把桶号夹到 0..19，这里只再兜一次底。
+                    let clamped = min(19, max(0, bucket))
                     counts[clamped] += count
                 }
                 for index in 0..<20 {
@@ -368,17 +420,33 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
             var numericCount = nonNull
             var nonNumericExamples: [String] = []
+            var numericSampleRows: Int?
             if info.kind == .text, nonNull > 0 {
-                let numericQuery = try connection.query("""
-                SELECT count(*) FROM \(table)
-                WHERE \(identifier) IS NOT NULL AND TRY_CAST(\(identifier) AS DOUBLE) IS NOT NULL
+                // 大表上 TRY_CAST 全表扫一遍要 0.3-0.4 秒，而类型冲突只是提示，
+                // 换成前 20 万行抽样（0.04 秒），命中时按样本比例推算行数并在界面标“抽样”。
+                let sampleLimit = DuckDBSession.textProbeSampleThreshold
+                let sampling = nonNull > sampleLimit
+                let source = sampling ? "(SELECT \(identifier) FROM \(table) WHERE \(identifier) IS NOT NULL LIMIT \(sampleLimit))" : table
+                let numericQuery = try statsQuery("""
+                SELECT count(*), count(*) FILTER (WHERE TRY_CAST(\(identifier) AS DOUBLE) IS NOT NULL)
+                FROM \(source)
                 """)
-                numericCount = Int(numericQuery.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+                mark("数值探针")
+                let sampleNonNull = Int(numericQuery.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+                let sampleNumeric = Int(numericQuery.column(at: 1).cast(to: Int64.self)[0] ?? 0)
+                if sampling {
+                    numericSampleRows = sampleNonNull
+                    numericCount = min(nonNull, Int((Double(sampleNumeric) / Double(max(1, sampleNonNull)) * Double(nonNull)).rounded()))
+                } else {
+                    numericCount = sampleNumeric
+                }
                 if numericCount > 0 && numericCount < nonNull {
-                    let examples = try connection.query("""
-                    SELECT CAST(\(identifier) AS VARCHAR) FROM \(table)
+                    // 同一列里反例经常重复（比如几千行都是“—”、几十万行都是 abc），
+                    // 取两条一样的没有意义，先去重再取两个不同的值。
+                    let examples = try statsQuery("""
+                    SELECT DISTINCT CAST(\(identifier) AS VARCHAR) AS v FROM \(table)
                     WHERE \(identifier) IS NOT NULL AND TRY_CAST(\(identifier) AS DOUBLE) IS NULL
-                    LIMIT 2
+                    ORDER BY 1 LIMIT 2
                     """)
                     let exampleColumn = examples.column(at: 0).cast(to: String.self)
                     for index in 0..<Int(examples.rowCount) {
@@ -391,8 +459,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
             var timeBuckets: [TimeBucket] = []
             if info.kind == .date || info.kind == .timestamp {
-                let timeQuery = try connection.query("""
-                SELECT CAST(date_trunc('day', CAST(\(identifier) AS TIMESTAMP)) AS VARCHAR) AS d, count(*)
+                let timeQuery = try statsQuery("""
+                SELECT CAST(date_trunc('day', CAST(\(identifier) AS TIMESTAMP)) AS VARCHAR) AS d, CAST(count(*) AS BIGINT) AS c
                 FROM \(table) WHERE \(identifier) IS NOT NULL
                 GROUP BY 1 ORDER BY 1 LIMIT 62
                 """)
@@ -423,6 +491,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 timeBuckets: timeBuckets,
                 numericCount: numericCount,
                 nonNumericExamples: nonNumericExamples,
+                numericSampleRows: numericSampleRows,
                 minLength: minLength,
                 maxLength: maxLength,
                 whitespaceCount: whitespaceCount

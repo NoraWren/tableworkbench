@@ -521,6 +521,75 @@ func run() throws {
     check("金额中位数 150", abs((amountStats.median ?? 0) - 150) < 0.001)
     check("直方图 20 桶且计数 6", amountStats.histogram.count == 20 && amountStats.histogram.reduce(0) { $0 + $1.count } == 6)
 
+    // 每桶计数要和手写区间查询对得上，防止分桶号整体错位
+    if let statsMin = amountStats.minValue.flatMap(Double.init),
+       let statsMax = amountStats.maxValue.flatMap(Double.init) {
+        let statsStep = (statsMax - statsMin) / 20
+        for (index, bucket) in amountStats.histogram.enumerated() {
+            // 最后一桶的右界是列最大值，要用 <=，否则最大值自己会被漏掉。
+            let upperOperator = index == amountStats.histogram.count - 1 ? "<=" : "<"
+            let manual = try query.session.runSQL("""
+            SELECT count(*) FROM data WHERE amount >= \(bucket.lower) AND amount \(upperOperator) \(bucket.upper)
+            """)
+            let manualRaw: String? = manual.rows.first?[0] ?? nil
+            let manualCount = Int(manualRaw ?? "") ?? -1
+            check("直方图第 \(index + 1) 桶与区间查询一致（\(bucket.count) vs \(manualCount)）", bucket.count == manualCount)
+        }
+        check("直方图上界等于列最大值", abs((amountStats.histogram.last?.upper ?? 0) - statsMax) < 1e-9 && statsStep > 0)
+    } else {
+        check("金额列有最小最大值", false)
+    }
+
+    // 时间列的按天聚合，count 必须真的读出来（INTEGER 读成 nil 会全变 0）
+    let datedCSV = working.appendingPathComponent("dated.csv")
+    try "name,day\na,2026-01-01\nb,2026-01-01\nc,2026-01-02\nd,2026-01-03\n".write(to: datedCSV, atomically: true, encoding: .utf8)
+    let datedSession = try FileImporter.open(url: datedCSV)
+    let dayStats = try datedSession.session.columnStats(column: "day")
+    check("时间列按天分桶 3 天", dayStats.timeBuckets.count == 3)
+    check("时间列每天计数正确", dayStats.timeBuckets.map(\.count) == [2, 1, 1])
+    // 时间列下面已经按天列出分布，高频值那组是同一批日期，界面会跳过它，这里守住数据侧的前提。
+    check("时间列同时带按天分布与高频值", dayStats.timeBuckets.count == 3 && !dayStats.topValues.isEmpty)
+    check("时间列最早最晚", (dayStats.minValue ?? "").hasPrefix("2026-01-01") && (dayStats.maxValue ?? "").hasPrefix("2026-01-03"))
+    check("时间跨度 2 天", abs((dayStats.timeSpan ?? 0) - 172_800) < 1)
+    check("去重值不走近似", !dayStats.distinctIsApproximate)
+    check("空值率两位小数", String(format: "%.2f", dayStats.nullRate * 100) == "0.00")
+    check("小表类型冲突不走抽样", dayStats.numericSampleRows == nil)
+
+    // 大表文本列的类型冲突提示改抽样：把门槛调到 2 行，验证抽样说明与比例推算
+    let probeCSV = working.appendingPathComponent("probe-sample.csv")
+    try "code\n100\n—\n200\n300\n400\n".write(to: probeCSV, atomically: true, encoding: .utf8)
+    let probeSession = try FileImporter.open(url: probeCSV)
+    DuckDBSession.textProbeSampleThreshold = 2
+    let sampledStats = try probeSession.session.columnStats(column: "code")
+    DuckDBSession.textProbeSampleThreshold = 200_000
+    check("抽样只看前 2 行", sampledStats.numericSampleRows == 2)
+    // 抽样里 1 个数字 1 个非数字，5 个非空行按比例推成 3 个数字
+    check("抽样按比例推算数字行数", sampledStats.numericCount == 3)
+    check("抽样后仍报反例", sampledStats.nonNumericExamples.first == "—")
+    check("抽样不影响总行数", sampledStats.totalRows == 5 && sampledStats.distinctCount == 5)
+    probeSession.session.close()
+    datedSession.session.close()
+
+    // 只有一个唯一值：直方图区间宽度会是 0，必须返回空直方图而不是除零崩溃
+    let constantCSV = working.appendingPathComponent("constant.csv")
+    try "flag,label\n1,同一个\n1,同一个\n1,同一个\n".write(to: constantCSV, atomically: true, encoding: .utf8)
+    let constantSession = try FileImporter.open(url: constantCSV)
+    let flagStats = try constantSession.session.columnStats(column: "flag")
+    check("唯一值列去重为 1", flagStats.distinctCount == 1)
+    check("唯一值列不给直方图", flagStats.histogram.isEmpty)
+    check("唯一值列范围仍可读", flagStats.minValue == flagStats.maxValue)
+    let labelStats = try constantSession.session.columnStats(column: "label")
+    check("唯一文本值只有一条高频值", labelStats.topValues.count == 1 && labelStats.topValues.first?.count == 3)
+    constantSession.session.close()
+
+    // 同一天内的时间跨度要落到小时与分钟，不能显示 9000 秒
+    let sameDayCSV = working.appendingPathComponent("same-day.csv")
+    try "at\n2026-01-01 10:00:00\n2026-01-01 12:30:00\n".write(to: sameDayCSV, atomically: true, encoding: .utf8)
+    let sameDaySession = try FileImporter.open(url: sameDayCSV)
+    let sameDayStats = try sameDaySession.session.columnStats(column: "at")
+    check("同一天跨度 2 小时 30 分", abs((sameDayStats.timeSpan ?? 0) - 9000) < 1)
+    sameDaySession.session.close()
+
     // 检查器的均值必须和 SQL AVG 对得上
     let avgSQL = try query.session.runSQL("SELECT avg(amount) FROM data")
     let avgRaw: String? = avgSQL.rows.first?[0] ?? nil
@@ -646,13 +715,18 @@ func run() throws {
     let singlePlan = AutoAnalysis.plan(columns: query.session.columns) { _ in 6 }
     check("小表一键分析出图", singlePlan.contains { $0.groupColumn == "city" } && singlePlan.first?.value.column == "amount")
 
+    // 首次统计 city：聚合 + 高频值 + 类型冲突探针，小表不触发反例查询和直方图
+    let beforeStats = query.session.statsQueryCount
     let cityStats = try query.session.columnStats(column: "city")
+    check("文本列一次统计三条 SQL", query.session.statsQueryCount - beforeStats == 3)
     let nameStats = try query.session.columnStats(column: "name")
     check("文本最短长度 1", nameStats.minLength == 1)
     check("文本最长长度 7", nameStats.maxLength == 7)
     check("无首尾空白", nameStats.whitespaceCount == 0)
+    let beforeCache = query.session.statsQueryCount
     let nameStatsAgain = try query.session.columnStats(column: "name")
     check("统计缓存命中", nameStatsAgain.totalRows == nameStats.totalRows && nameStatsAgain.maxLength == 7)
+    check("命中缓存不再查库", query.session.statsQueryCount == beforeCache)
     check("城市高频值第一", cityStats.topValues.first?.value == "上海" && cityStats.topValues.first?.count == 4)
 
     let nullStats = try opened.session.columnStats(column: "备注")
@@ -667,6 +741,15 @@ func run() throws {
     check("混合列反例", mixedStats.nonNumericExamples == ["—"])
     check("纯文本不误报", cityStats.numericCount == 0)
     check("数值列无冲突", amountStats.conflictCount == 0)
+
+    // 反例重复时要去重：几千行都是同一个“—”，界面不该把同一个值列两遍
+    let repeatURL = working.appendingPathComponent("repeat-gap.csv")
+    try "code\n100\n—\n200\n—\n300\n—\n".write(to: repeatURL, atomically: true, encoding: .utf8)
+    let repeatSession = try FileImporter.open(url: repeatURL)
+    let repeatStats = try repeatSession.session.columnStats(column: "code")
+    check("重复反例只列一次", repeatStats.nonNumericExamples == ["—"])
+    check("重复反例不影响冲突行数", repeatStats.conflictCount == 3)
+    repeatSession.session.close()
 
     let exportURL = working.appendingPathComponent("export.csv")
     _ = try query.session.export(to: exportURL, format: .csv)
