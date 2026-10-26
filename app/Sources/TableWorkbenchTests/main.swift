@@ -1218,6 +1218,16 @@ func run() throws {
     MainActor.assumeIsolated { model.selection = secondID }
     check("换文件清空选中行", MainActor.assumeIsolated { model.selectedRows.isEmpty })
 
+    // 切文件时，上一份文件的图表与查询结果都不能跟过来。
+    MainActor.assumeIsolated { model.runSQL(entryID: secondID!, sql: "select * from data") }
+    waitFor { MainActor.assumeIsolated { model.sqlResult != nil } }
+    check("SQL 结果已生成", MainActor.assumeIsolated { model.sqlResult != nil })
+    MainActor.assumeIsolated { model.selection = firstID }
+    check("换文件清空 SQL 结果", MainActor.assumeIsolated { model.sqlResult == nil && model.resultTitle == nil })
+    check("换文件清掉运行中标记", MainActor.assumeIsolated {
+        !model.isRunningSQL && !model.isBuildingChart && !model.isAnalyzing
+    })
+
     // 一键分析：真实文件走一遍挑列、聚合、出图
     let autoModel = MainActor.assumeIsolated { WorkspaceModel() }
     let autoFile = URL(fileURLWithPath: "../bench-data/wide-100k.csv")
@@ -1232,7 +1242,11 @@ func run() throws {
         check("一键分析按分类词挑维度", charts?.first?.title.hasPrefix("区域") == true)
         check("一键分析跳过订单号", charts?.contains { $0.title.hasPrefix("订单号") } == false)
         check("一键分析每张图有数据", charts?.allSatisfy { !$0.isEmpty } == true)
-        MainActor.assumeIsolated { autoModel.clearAutoAnalysis() }
+        // 停在分析结果页直接关文件：中栏不能留着上一份的图。
+        MainActor.assumeIsolated { autoModel.closeSelected() }
+        check("关文件后一键分析结果清空", MainActor.assumeIsolated { autoModel.autoCharts == nil })
+        check("关文件后文件列表为空", MainActor.assumeIsolated { autoModel.entries.isEmpty })
+        check("关文件后不再有选中文件", MainActor.assumeIsolated { autoModel.selection == nil })
         MainActor.assumeIsolated { for entry in autoModel.entries { entry.session.close() } }
     } else {
         print("SKIP  缺少 wide-100k.csv，跳过一键分析端到端")

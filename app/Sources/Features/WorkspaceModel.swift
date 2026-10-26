@@ -72,14 +72,9 @@ public final class WorkspaceModel: ObservableObject {
     @Published public var selection: UUID? {
         didSet {
             guard oldValue != selection else { return }
-            // 换文件时清掉上一份的列统计，别让检查器张冠李戴。
-            statsColumn = nil
-            columnStats = nil
-            isLoadingStats = false
-            // 选中行也跟着换，避免把上一份的行号导出去。
-            selectedRows = []
-            rowDetail = nil
-            chartData = nil
+            // 换文件时把挂在上一份数据上的展示态一起清掉，
+            // 否则中栏会留着上一份的图表或查询结果。
+            resetPresentation()
         }
     }
     @Published public private(set) var error: ImportError?
@@ -283,6 +278,8 @@ public final class WorkspaceModel: ObservableObject {
                 }
             }.value
 
+            // 文件可能在查询期间被关掉，这时结果没有归处，直接丢弃。
+            guard isOpen(entryID) else { return }
             if let result = outcome.0 {
                 sqlResult = result
                 sqlHistory.record(trimmed)
@@ -312,6 +309,7 @@ public final class WorkspaceModel: ObservableObject {
                 }
             }.value
 
+            guard isOpen(entryID) else { return }
             if let result = outcome.0 {
                 sqlResult = result
             } else {
@@ -342,6 +340,7 @@ public final class WorkspaceModel: ObservableObject {
                 }
             }.value
 
+            guard isOpen(entryID) else { return }
             if let data = outcome.0 {
                 chartData = data
             } else {
@@ -392,6 +391,7 @@ public final class WorkspaceModel: ObservableObject {
                 return (charts, nil)
             }.value
 
+            guard isOpen(entryID) else { return }
             autoCharts = outcome.0.isEmpty ? nil : outcome.0
             error = outcome.1
             isAnalyzing = false
@@ -562,9 +562,34 @@ public final class WorkspaceModel: ObservableObject {
 
     public func closeSelected() {
         guard let selection, let index = entries.firstIndex(where: { $0.id == selection }) else { return }
+        // 先清展示态再关连接：反过来的话，改 selection 触发的重绘
+        // 有一帧可能去读一个已经关掉的会话。
+        resetPresentation()
         entries[index].session.close()
         entries.remove(at: index)
         self.selection = entries.first?.id
+    }
+
+    /// 清掉所有挂在当前文件上的展示态。切文件与关文件都走这里，
+    /// 以后新增一类结果只需要在这一个地方登记。
+    private func resetPresentation() {
+        statsColumn = nil
+        columnStats = nil
+        isLoadingStats = false
+        selectedRows = []
+        rowDetail = nil
+        chartData = nil
+        isBuildingChart = false
+        autoCharts = nil
+        isAnalyzing = false
+        sqlResult = nil
+        resultTitle = nil
+        isRunningSQL = false
+    }
+
+    /// 异步任务回来时用它确认目标文件还开着。
+    private func isOpen(_ entryID: UUID) -> Bool {
+        entries.contains { $0.id == entryID }
     }
 
     public func report(_ error: ImportError) {
