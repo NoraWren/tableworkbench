@@ -36,7 +36,8 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
 
     public func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
         guard !computedColumnNames.contains(tableColumn.identifier.rawValue) else { return }
-        let additive = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+        // 测试进程里没有 NSApplication，NSApp 是 nil，这里不能直接解包。
+        let additive = NSApp?.currentEvent?.modifierFlags.contains(.shift) ?? false
         onSortClick?(tableColumn.identifier.rawValue, additive)
     }
 

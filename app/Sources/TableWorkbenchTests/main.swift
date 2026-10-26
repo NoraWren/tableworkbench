@@ -4,7 +4,7 @@ import CryptoKit
 import Darwin
 import DuckDBKit
 import Features
-import DataGrid
+@testable import DataGrid
 import SQLEditorUI
 import WorkbenchUI
 import SwiftUI
@@ -931,6 +931,19 @@ func run() throws {
     gridTable.copy(nil)
     check("复制不带表头", NSPasteboard.general.string(forType: .string) == "a\tb")
     UserDefaults.standard.set(true, forKey: "copyIncludesHeader")
+
+    // 计算列是表达式拼出来的，没有可排序的物理列，点表头必须被吞掉。
+    gridSource.computedColumnNames = ["B"]
+    var sortClicks: [String] = []
+    gridSource.onSortClick = { column, _ in sortClicks.append(column) }
+    let columnA = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("A"))
+    let columnB = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("B"))
+    gridSource.tableView(gridTable, didClick: columnA)
+    check("普通列点击触发排序", sortClicks == ["A"])
+    gridSource.tableView(gridTable, didClick: columnB)
+    check("计算列点击被忽略", sortClicks == ["A"])
+    gridSource.onSortClick = nil
+    gridSource.computedColumnNames = []
 
     // 大范围复制的确认规则（R-EXP-04）。阈值是“超过”一万，正好一万不打扰。
     check("一万行以内不弹框", !CopyConfirmation.needsConfirmation(rowCount: 10_000))
