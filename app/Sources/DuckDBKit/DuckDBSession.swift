@@ -18,14 +18,24 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     private let temporaryDirectory: URL
     private let lock = NSLock()
     private var closed = false
+    /// 取块时用来定位行的列：CSV 物化表用 rowid，Parquet 视图用 __rid。
+    private var orderColumn = "rowid"
 
-    private init(database: Database, connection: Connection, temporaryDirectory: URL, columns: [ColumnInfo], rowCount: Int) {
+    private init(
+        database: Database,
+        connection: Connection,
+        temporaryDirectory: URL,
+        columns: [ColumnInfo],
+        rowCount: Int,
+        orderColumn: String = "rowid"
+    ) {
         self.database = database
         self.connection = connection
         self.temporaryDirectory = temporaryDirectory
         self.columns = columns
         self.rowCount = rowCount
         self.resultCount = rowCount
+        self.orderColumn = orderColumn
     }
 
     deinit {
@@ -47,6 +57,13 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
     private static func open(source: Source) throws -> DuckDBSession {
         do {
+            let reportTiming = ProcessInfo.processInfo.environment["TW_OPEN_TIMING"] != nil
+            let phaseStart = Foundation.Date()
+            func mark(_ label: String) {
+                guard reportTiming else { return }
+                let elapsed = Foundation.Date().timeIntervalSince(phaseStart)
+                FileHandle.standardError.write(Data(String(format: "[open] %@ %.3f 秒\n", label, elapsed).utf8))
+            }
             let fileManager = FileManager.default
             let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent("tableworkbench-\(UUID().uuidString)", isDirectory: true)
             try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
@@ -56,6 +73,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             try connection.execute("SET temp_directory='\(temporaryDirectory.path.replacingOccurrences(of: "'", with: "''"))'")
 
             let createTable: String
+            var useParquetView = false
             switch source {
             case .csv(let url, let format):
                 let path = url.path.replacingOccurrences(of: "'", with: "''")
@@ -68,12 +86,28 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 """
             case .parquet(let url):
                 let path = url.path.replacingOccurrences(of: "'", with: "''")
-                createTable = "CREATE TABLE \"__base\" AS SELECT * FROM read_parquet('\(path)')"
+                // 小表物化更划算（宽表按列投影走 Parquet 反而慢），大表留在视图里，打开不用拷贝。
+                let probe = try connection.query("SELECT count(*) FROM read_parquet('\(path)')")
+                let rows = Int(probe.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+                let described = try connection.query("DESCRIBE SELECT * FROM read_parquet('\(path)')")
+                let columnCount = Int(described.rowCount)
+                let materialize = rows * max(1, columnCount) <= 20_000_000
+                useParquetView = !materialize
+                if materialize {
+                    createTable = "CREATE TABLE \"__base\" AS SELECT * FROM read_parquet('\(path)')"
+                } else {
+                    createTable = """
+                    CREATE VIEW "__base" AS
+                    SELECT * EXCLUDE (file_row_number), file_row_number AS "__rid"
+                    FROM read_parquet('\(path)', file_row_number=true)
+                    """
+                }
             }
             try connection.execute(createTable)
-            try connection.execute("CREATE VIEW \"data\" AS SELECT * FROM \"__base\"")
+            mark("物化 __base")
 
             let described = try connection.query("DESCRIBE SELECT * FROM \"__base\"")
+            mark("DESCRIBE")
             let nameColumn = described.column(at: 0).cast(to: String.self)
             let typeColumn = described.column(at: 1).cast(to: String.self)
             let describeCount = Int(described.rowCount)
@@ -87,6 +121,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 typeNames.append(typeColumn[DBInt(index)] ?? "VARCHAR")
             }
             let displayNames = CSVSniffer.sanitizeColumnNames(rawNames)
+            // data 视图只暴露真实列，__rid 仅内部取块用。
+            let visibleColumns = rawNames.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: ", ")
+            try connection.execute("CREATE VIEW \"data\" AS SELECT \(visibleColumns) FROM \"__base\"")
 
             var columns: [ColumnInfo] = []
             columns.reserveCapacity(rawNames.count)
@@ -103,13 +140,16 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
             let counted = try connection.query("SELECT count(*) FROM \"__base\"")
             let total = counted.column(at: 0).cast(to: Int64.self)[0] ?? 0
+            mark("count(*)")
 
+            let orderColumn = useParquetView ? "__rid" : "rowid"
             return DuckDBSession(
                 database: database,
                 connection: connection,
                 temporaryDirectory: temporaryDirectory,
                 columns: columns,
-                rowCount: Int(total)
+                rowCount: Int(total),
+                orderColumn: orderColumn
             )
         } catch let error as ImportError {
             throw error
@@ -800,7 +840,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         let selectList = selectParts.joined(separator: ", ")
         let table = hasResultTable ? "\"__result\"" : "\"__base\""
         let upperBound = safeOffset + safeSize
-        let sql = "SELECT \(selectList) FROM \(table) WHERE rowid >= \(safeOffset) AND rowid < \(upperBound) ORDER BY rowid"
+        // __result 是物化表，用 rowid；只有直接查 Parquet 视图时才用 __rid。
+        let order = hasResultTable ? "rowid" : orderColumn
+        let sql = "SELECT \(selectList) FROM \(table) WHERE \(order) >= \(safeOffset) AND \(order) < \(upperBound) ORDER BY \(order)"
 
         do {
             let result = try connection.query(sql)

@@ -148,6 +148,7 @@ func run() throws {
         )
         let detailSeconds = Date().timeIntervalSince(detailStart)
         check("宽表行详情 200 列", detailBlock.rows.first?.count == 200)
+        print(String(format: "宽表行详情耗时: %.3f 秒", detailSeconds))
         check("宽表行详情 300 毫秒内", detailSeconds < 0.3)
         openedWide.session.close()
     } else {
