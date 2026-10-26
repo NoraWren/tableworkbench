@@ -64,9 +64,9 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 05-pivot-table.md | 4 | 已实现；R-PVT-01/02/03/04 的勾选已同步，剩“多级表头逐级合并”未做 |
 | 06-column-inspector.md | 4 | 已实现，R-INSP-01/02/03/04 验收全部勾掉（深色对比度已离屏实测） |
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
-| 08-performance.md | 7 | 基准已补齐：滚动帧耗时与冷启动都有实测；500MB 冷打开 2.0–2.4 秒贴着预算 |
+| 08-performance.md | 7 | 基准已补齐：滚动帧耗时、包体积与冷启动都有实测；500MB 冷打开 2.1–2.4 秒贴着预算，冷启动 0.55–0.63 秒也擦着 0.6 秒 |
 | 09-app-shell.md | 7 | 已实现；R-SHELL-02 菜单与 11 条快捷键逐条实测通过，其余条目验收框待同步 |
-| 10-packaging-release.md | 6 | dmg 已出，签名与公证缺账号 |
+| 10-packaging-release.md | 6 | dmg 15.8 MB 已出，README 第一屏三个数字齐；签名与公证缺账号 |
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 17 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
