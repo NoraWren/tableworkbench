@@ -7,6 +7,7 @@ import Features
 @testable import DataGrid
 import SQLEditorUI
 import WorkbenchUI
+import ChartUI
 import SwiftUI
 
 var failures = 0
@@ -676,6 +677,41 @@ func run() throws {
     check("筛选到 0 行给空图", noMatchChart.isEmpty && noMatchResult.rowCount == 0)
     try query.session.apply(view: .empty)
 
+    // 配色对比度（R-VIZ-04）：柱、线、饼块不低于 4.5:1，文字同；网格线只求看得见。
+    check("对比度公式：黑白 21:1", abs(ChartPalette.contrast(.black, .white) - 21) < 0.01)
+    check("对比度公式：同色 1:1", abs(ChartPalette.contrast(.black, .black) - 1) < 0.0001)
+    let halfWhite = NSColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+    let flattened = ChartPalette.flatten(NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.5), over: .white)
+    check("半透明按底色合成成实色",
+          abs(flattened.redComponent - 0.5) < 0.001 && flattened.alphaComponent == 1)
+    check("合成后的对比度与实色一致",
+          abs(ChartPalette.contrast(flattened, .white) - ChartPalette.contrast(halfWhite, .white)) < 0.01)
+
+    // 两种画布色都按 ChartPalette.canvas 的实测值来，跟离屏渲染量出来的一致。
+    let lightCanvas = NSColor(srgbRed: 0.925, green: 0.925, blue: 0.925, alpha: 1)
+    let darkCanvas = NSColor(srgbRed: 0.196, green: 0.196, blue: 0.196, alpha: 1)
+    for (name, canvas) in [("浅色", lightCanvas), ("深色", darkCanvas)] {
+        let fill = ChartPalette.fill(background: canvas)
+        let soft = ChartPalette.softFill(background: canvas)
+        let text = ChartPalette.text(background: canvas)
+        let grid = ChartPalette.grid(background: canvas)
+        check("\(name)柱色对比度 ≥ 4.5:1", ChartPalette.contrast(fill, canvas) >= 4.5)
+        check("\(name)次级柱色对比度 ≥ 4.5:1", ChartPalette.contrast(soft, canvas) >= 4.5)
+        check("\(name)图内文字对比度 ≥ 4.5:1", ChartPalette.contrast(text, canvas) >= 4.5)
+        check("\(name)网格线看得出但不抢眼",
+              ChartPalette.contrast(grid, canvas) >= 1.25 && ChartPalette.contrast(grid, canvas) <= 1.8)
+        check("\(name)主色与次级色分得开", ChartPalette.contrast(fill, soft) >= 1.3)
+    }
+
+    // 已经被推够的色不该再动，推值逻辑只在不够时才生效。
+    let alreadyReadable = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+    let pushed = ChartPalette.adjusted(alreadyReadable, against: lightCanvas, minContrast: 4.5)
+    check("够对比度的色原样返回", pushed == alreadyReadable)
+    let loud = ChartPalette.adjusted(NSColor(srgbRed: 0.98, green: 0.98, blue: 0.98, alpha: 1),
+                                     against: lightCanvas, minContrast: 4.5)
+    check("不够对比度的色被推到门槛", ChartPalette.contrast(loud, lightCanvas) >= 4.5)
+    check("推值保色相（浅灰仍是灰）", abs(loud.redComponent - loud.blueComponent) < 0.02)
+
     // 一键分析：挑列、基数过滤、兜底
     let autoColumns = [
         ColumnInfo(name: "order", displayName: "订单号", typeName: "VARCHAR", kind: .text),
@@ -909,6 +945,22 @@ func run() throws {
     check("缓存占用统计 200", limitCache.totalSizeBytes() == 200)
     limitCache.setLimitBytes(10)
     check("设置上限立即淘汰", limitCache.totalSizeBytes() == 0)
+
+    // 隐私页的“清除缓存”：只删 parquet，目录里其他文件不能跟着没。
+    let clearDirectory = working.appendingPathComponent("clear-cache")
+    let clearCache = ParquetCache(baseDirectory: clearDirectory)
+    try Data(repeating: 1, count: 300).write(to: clearDirectory.appendingPathComponent("a.parquet"))
+    try Data(repeating: 1, count: 200).write(to: clearDirectory.appendingPathComponent("b.parquet"))
+    try "keep".write(to: clearDirectory.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
+    check("清空前占用 500 字节且显示为非零", clearCache.totalSizeBytes() == 500)
+    clearCache.clearAll()
+    check("清空后占用归零", clearCache.totalSizeBytes() == 0)
+    check("清空只删缓存文件", FileManager.default.fileExists(atPath: clearDirectory.appendingPathComponent("notes.txt").path))
+    clearCache.clearAll()
+    check("重复清空不报错", clearCache.totalSizeBytes() == 0)
+    // 清空之后重新导入，缓存要能重新生成，不能因为被删过就再也不写。
+    let afterClearOpen = try FileImporter.open(url: cacheCSV)
+    check("清空后重新导入正常返回数据", afterClearOpen.session.rowCount == 3)
 
     // Excel 导入
     let fixture = URL(fileURLWithPath: "Tests/Fixtures/sample.xlsx")

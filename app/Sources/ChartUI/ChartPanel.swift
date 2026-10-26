@@ -138,7 +138,8 @@ public struct AutoAnalysisView: View {
                     ForEach(charts, id: \.title) { chart in
                         ChartView(data: chart, compact: true) {}
                             .frame(height: 320)
-                            .background(Color(nsColor: .textBackgroundColor).opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                            // 图自己铺了不透明画布色，这里只负责切圆角，再叠一层底色会把画布盖掉。
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
                 .padding(14)
@@ -202,11 +203,19 @@ public struct ChartView: View {
                 .accessibilityLabel(Text(accessibilitySummary))
             }
         }
+        // 画布色由 ChartView 自己铺：取色和渲染用同一个值，量出来的对比度才对得上真窗口。
+        .background(Color(nsColor: ChartPalette.canvas))
         .frame(maxWidth: .infinity, maxHeight: compact ? nil : .infinity)
     }
 
-    private var accent: Color { .accentColor }
-    private var secondary: Color { .secondary }
+    /// 柱子、折线、饼块用实色。强调色叠半透明会跟底混掉，深色下实测 2.78:1，够不上 4.5:1。
+    private var accent: Color { Color(nsColor: ChartPalette.fill()) }
+    /// “其他”那一档和饼图隔行铺色要跟主色区分开，但自身也得够对比度。
+    private var accentSoft: Color { Color(nsColor: ChartPalette.softFill()) }
+    /// 坐标刻度、组名、数值标注这些 8–10 点的小字。
+    private var secondary: Color { Color(nsColor: ChartPalette.text()) }
+    /// 网格线。纯装饰，只保证看得见，不跟柱子和文字抢对比度。
+    private var gridLine: Color { Color(nsColor: ChartPalette.grid()) }
 
     private func value(_ raw: Double) -> String { ChartData.format(raw) }
 
@@ -242,7 +251,7 @@ public struct ChartView: View {
             var path = Path()
             path.move(to: CGPoint(x: plot.minX, y: y))
             path.addLine(to: CGPoint(x: plot.maxX, y: y))
-            context.stroke(path, with: .color(Color.secondary.opacity(0.18)), lineWidth: 1)
+            context.stroke(path, with: .color(gridLine), lineWidth: 1)
             context.draw(
                 Text(axisLabel(maxValue * Double(ratio)))
                     .font(.system(size: 9, design: .rounded))
@@ -263,7 +272,7 @@ public struct ChartView: View {
             let rect = CGRect(x: x, y: plot.maxY - height, width: barWidth, height: max(1, height))
             context.fill(
                 Path(roundedRect: rect, cornerRadius: 3),
-                with: .color(accent.opacity(point.label == "其他" ? 0.45 : 0.85))
+                with: .color(point.label == "其他" ? accentSoft : accent)
             )
             // 柱子数量不多时把数值标在柱顶，五个区域差不多高的时候也能读出差距。
             if count <= 8 {
@@ -307,7 +316,7 @@ public struct ChartView: View {
             )
             context.fill(
                 Path(roundedRect: bar, cornerRadius: 3),
-                with: .color(accent.opacity(point.label == "其他" ? 0.45 : 0.85))
+                with: .color(point.label == "其他" ? accentSoft : accent)
             )
             context.draw(
                 Text(axisLabel(point.value))
@@ -332,7 +341,7 @@ public struct ChartView: View {
             var path = Path()
             path.move(to: CGPoint(x: plot.minX, y: y))
             path.addLine(to: CGPoint(x: plot.maxX, y: y))
-            context.stroke(path, with: .color(Color.secondary.opacity(0.18)), lineWidth: 1)
+            context.stroke(path, with: .color(gridLine), lineWidth: 1)
             context.draw(
                 Text(axisLabel(maxValue * Double(ratio)))
                     .font(.system(size: 9, design: .rounded))
@@ -386,7 +395,9 @@ public struct ChartView: View {
             slice.move(to: center)
             slice.addArc(center: center, radius: radius, startAngle: start, endAngle: end, clockwise: false)
             slice.closeSubpath()
-            context.fill(slice, with: .color(accent.opacity(index % 2 == 0 ? 0.85 : 0.6)))
+            context.fill(slice, with: .color(index % 2 == 0 ? accent : accentSoft))
+            // 饼图首尾两片可能落在同一档色上，描一道画布色把边界分开。
+            context.stroke(slice, with: .color(Color(nsColor: ChartPalette.canvas)), lineWidth: 1)
             start = end
         }
 
@@ -395,7 +406,7 @@ public struct ChartView: View {
         for (index, point) in data.points.enumerated() {
             let y = 10 + lineHeight * CGFloat(index) + lineHeight / 2
             let swatch = CGRect(x: legendX, y: y - 4, width: 8, height: 8)
-            context.fill(Path(swatch), with: .color(accent.opacity(index % 2 == 0 ? 0.85 : 0.6)))
+            context.fill(Path(swatch), with: .color(index % 2 == 0 ? accent : accentSoft))
             let percent = point.value / total * 100
             context.draw(
                 Text("\(point.label)  \(String(format: "%.1f", percent))%")

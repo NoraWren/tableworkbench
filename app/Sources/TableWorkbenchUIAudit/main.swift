@@ -47,13 +47,19 @@ func render<Content: View>(
 ) throws {
     let host = NSHostingView(rootView: content())
     host.frame = NSRect(origin: .zero, size: size)
-    if dark {
-        // 深色模式靠外观换，不是靠 colorScheme 环境值，Canvas 里取到的次要色才跟着变。
-        host.appearance = NSAppearance(named: .darkAqua)
-        // 离屏视图自己不画背景，真实窗口才有深色底，这里补一层才看得出对比度。
-        host.wantsLayer = true
-        host.layer?.backgroundColor = NSColor(calibratedWhite: 0.13, alpha: 1).cgColor
+    // 外观要显式钉住，否则第二张图会沿用上一次的深色外观。
+    let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+    host.appearance = appearance
+    // 离屏视图自己不画背景，真实窗口才有底。补的是系统解析出来的窗口底色，
+    // 不是手调的白度，这样量出来的对比度才对得上真窗口。
+    var backdrop = NSColor.white
+    if let appearance {
+        appearance.performAsCurrentDrawingAppearance {
+            backdrop = NSColor.windowBackgroundColor.usingColorSpace(.sRGB) ?? backdrop
+        }
     }
+    host.wantsLayer = true
+    host.layer?.backgroundColor = backdrop.cgColor
 
     let window = NSWindow(
         contentRect: NSRect(origin: .zero, size: size),
@@ -159,6 +165,65 @@ MainActor.assumeIsolated {
             SettingsView()
         }
 
+        // 检查器的统计块：深色下柱子、次要色文字、橙色冲突提示都得够对比度（R-INSP-03）。
+        // 放在 List 里渲染，背景才是真实窗口里那层侧栏底色。
+        let numericStats = ColumnStats(
+            column: "金额",
+            typeName: "BIGINT",
+            kind: .integer,
+            totalRows: 10_170_000,
+            nullCount: 12_345,
+            distinctCount: 5_335_465,
+            minValue: "1.00",
+            maxValue: "99999.00",
+            mean: 4321.5,
+            median: 2100,
+            standardDeviation: 987.65,
+            topValues: [TopValue(value: "8800", count: 42)],
+            histogram: (0..<20).map { index in
+                HistogramBucket(
+                    lower: Double(index) * 5000,
+                    upper: Double(index + 1) * 5000,
+                    count: index % 5 == 0 ? 900_000 : 120_000 + index * 9_000
+                )
+            }
+        )
+        let conflictStats = ColumnStats(
+            column: "mix",
+            typeName: "VARCHAR",
+            kind: .text,
+            totalRows: 300_000,
+            nullCount: 0,
+            distinctCount: 150_001,
+            minValue: "0",
+            maxValue: "abc",
+            mean: nil,
+            median: nil,
+            standardDeviation: nil,
+            topValues: [TopValue(value: "abc", count: 150_000)],
+            numericCount: 150_000,
+            nonNumericExamples: ["abc"],
+            numericSampleRows: 200_000,
+            minLength: 1,
+            maxLength: 3,
+            whitespaceCount: 0
+        )
+        for (name, stats) in [("stats-number", numericStats), ("stats-conflict", conflictStats)] {
+            for dark in [false, true] {
+                let suffix = dark ? "-dark" : ""
+                try render(name + suffix, size: NSSize(width: 300, height: 460), dark: dark) {
+                    List {
+                        Section {
+                            ColumnStatsRows.build(stats)
+                        } header: {
+                            Text("统计").foregroundStyle(.secondary)
+                        }
+                    }
+                    .listStyle(.sidebar)
+                }
+            }
+        }
+
         // 四种图各来一张，确认 Canvas 画得出来、标题与图例不打架（R-VIZ-01）。
         let chartPoints = [
             ChartPoint(label: "华南", value: 5120),
@@ -180,14 +245,14 @@ MainActor.assumeIsolated {
                 groupCount: chartPoints.count
             )
         }
+        // 每种图都出浅色和深色两张：柱、线、饼块、网格线、文字都要逐张量对比度（R-VIZ-04）。
         for kind in ChartKind.allCases {
-            try render("chart-" + kind.rawValue, size: NSSize(width: 720, height: 360)) {
-                ChartView(data: chartData(kind)) {}
+            for dark in [false, true] {
+                let suffix = dark ? "-dark" : ""
+                try render("chart-" + kind.rawValue + suffix, size: NSSize(width: 720, height: 360), dark: dark) {
+                    ChartView(data: chartData(kind)) {}
+                }
             }
-        }
-        // 深色模式：柱、网格线、文字都要还看得清（R-VIZ-04）。
-        try render("chart-bar-dark", size: NSSize(width: 720, height: 360), dark: true) {
-            ChartView(data: chartData(.bar)) {}
         }
         // 单分组与空结果两种边界。
         try render("chart-single", size: NSSize(width: 720, height: 360)) {
