@@ -21,5 +21,5 @@
 ## 4. 验证
 
 - [x] 4.1 测试程序覆盖挑列、基数过滤、兜底，并用 10 万行真实文件跑通“挑列 → 聚合 → 出多张图”
-- [ ] 4.2 328 万行文件上一键分析整体 3 秒内
-- [ ] 4.3 运行 openspec validate --strict add-auto-analysis
+- [x] 4.2 328 万行文件上一键分析整体 3 秒内（release 复跑 0.22 秒出 5 张图；debug 12 秒左右，属构建优化差异，预算只在 release 卡）
+- [x] 4.3 运行 openspec validate --strict add-auto-analysis

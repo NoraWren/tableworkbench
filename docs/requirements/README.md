@@ -61,7 +61,7 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 02-data-import.md | 7 | 已实现，验收框待同步 |
 | 03-data-grid.md | 8 | 已实现，R-GRID-08 已完成 |
 | 04-sql-console.md | 5 | 已实现，验收框待同步 |
-| 05-pivot-table.md | 4 | 已实现，验收框待同步 |
+| 05-pivot-table.md | 4 | 已实现；R-PVT-01/02/03/04 的勾选已同步，剩“多级表头逐级合并”未做 |
 | 06-column-inspector.md | 4 | 已实现，验收框待同步 |
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
 | 08-performance.md | 7 | 基准已补齐：滚动帧耗时与冷启动都有实测；500MB 冷打开 2.0–2.4 秒贴着预算 |
@@ -70,6 +70,6 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 17 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
-| 14-charts.md | 5 | 图表四类、一键分析已实现；release 出图 0.07 秒 |
+| 14-charts.md | 5 | 图表四类、一键分析已实现，R-VIZ-02/03/04/05 验收已勾；release 出图 0.07 秒 |
 
 共 101 条需求。
