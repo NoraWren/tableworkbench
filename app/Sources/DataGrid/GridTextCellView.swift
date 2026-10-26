@@ -2,13 +2,13 @@ import AppKit
 
 /// 轻量单元格：直接画文本，不用 NSTextField。
 /// 宽表滚动时一帧要更新几千个单元格，控件那套布局与校验开销省掉后帧耗时明显下降。
-final class GridTextCellView: NSView {
+public final class GridTextCellView: NSView {
     private var content: NSAttributedString?
     private let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
 
-    override var isFlipped: Bool { true }
+    public override var isFlipped: Bool { true }
 
-    override func draw(_ dirtyRect: NSRect) {
+    public override func draw(_ dirtyRect: NSRect) {
         guard let content else { return }
         let height = content.size().height
         let rect = NSRect(
@@ -20,7 +20,7 @@ final class GridTextCellView: NSView {
         content.draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
     }
 
-    func configure(text: String, alignment: NSTextAlignment, color: NSColor) {
+    public func configure(text: String, alignment: NSTextAlignment, color: NSColor) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
         paragraph.lineBreakMode = .byTruncatingTail
@@ -33,6 +33,10 @@ final class GridTextCellView: NSView {
             ]
         )
         toolTip = text
+        // 自绘之后 NSTextField 自带的辅助功能文本没了，这里补回来，VoiceOver 才读得到格子内容。
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel(text)
         needsDisplay = true
     }
 }

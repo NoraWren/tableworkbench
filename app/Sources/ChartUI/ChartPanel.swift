@@ -198,6 +198,8 @@ public struct ChartView: View {
                     }
                 }
                 .padding(18)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(accessibilitySummary))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: compact ? nil : .infinity)
@@ -207,6 +209,14 @@ public struct ChartView: View {
     private var secondary: Color { .secondary }
 
     private func value(_ raw: Double) -> String { ChartData.format(raw) }
+
+    /// 图是画出来的，给辅助功能留一句文字摘要。
+    private var accessibilitySummary: String {
+        let top = data.points.prefix(3)
+            .map { "\($0.label) \(ChartData.format($0.value))" }
+            .joined(separator: "，")
+        return "\(data.title)，共 \(data.points.count) 组。\(top)"
+    }
 
     /// 坐标轴上的数字用万/亿收短，不然十位数会挤出绘图区。
     private func axisLabel(_ raw: Double) -> String {

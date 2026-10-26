@@ -436,6 +436,11 @@ func run() throws {
         ColumnInfo(name: "amount", displayName: "金额", typeName: "DOUBLE", kind: .double)
     ]
     check("金额比数量优先", AutoAnalysis.measureColumn(reordered)?.name == "amount")
+
+    // 自绘单元格要保留辅助功能文本
+    let cell = GridTextCellView(frame: NSRect(x: 0, y: 0, width: 80, height: 20))
+    cell.configure(text: "12,345.68", alignment: .right, color: .labelColor)
+    check("单元格辅助功能标签", cell.accessibilityLabel() == "12,345.68")
     let noneSpecs = AutoAnalysis.plan(columns: autoColumns) { _ in 100 }
     check("基数全超限时不出图", noneSpecs.isEmpty)
     check("没有数值列不出图", AutoAnalysis.plan(columns: [autoColumns[1]]) { _ in 3 }.isEmpty)
