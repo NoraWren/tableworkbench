@@ -50,6 +50,7 @@ struct TableWorkbenchApp: App {
         .windowToolbarStyle(.unified)
         .commands {
             FileCommands()
+            FindCommands()
             QueryCommands()
             ViewCommands()
         }

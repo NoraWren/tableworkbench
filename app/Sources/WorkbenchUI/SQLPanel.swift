@@ -99,7 +99,6 @@ public struct SQLEditor: View {
                 Button("运行") {
                     onRun()
                 }
-                .keyboardShortcut("r", modifiers: .command)
                 .disabled(isRunning)
             }
             SQLTextView(text: $state.text, columns: columns, tables: tables)

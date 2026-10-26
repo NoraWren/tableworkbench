@@ -1424,6 +1424,80 @@ func run() throws {
     check("空结果不给截断提示", emptyStatus.truncationNotice == nil)
     check("摘要五位数加千分位", SQLResultStatus.grouped(1234567) == "1,234,567")
     check("摘要三位数不加分隔", SQLResultStatus.grouped(999) == "999")
+
+    // 菜单表：需求里列的每一项都要有快捷键，且组合不能撞（R-SHELL-02）。
+    let menus = MenuCatalog.all
+    check("菜单项覆盖需求清单", Set(menus.map(\.id)).count == 11)
+    check("每个菜单项都有快捷键", menus.allSatisfy { $0.modifiers.contains(.command) })
+    check("没有重复的快捷键组合", MenuCatalog.duplicatedCombinations.isEmpty)
+    check("文件菜单三项", MenuCatalog.file.count == 3)
+    check("查询菜单四项", MenuCatalog.query.count == 4)
+    check("视图菜单四项", MenuCatalog.view.count == 4)
+
+    // 文档里写的组合，逐个对上。
+    let expected: [MenuItem.ID: String] = [
+        .openFile: "command+o",
+        .exportFile: "command+shift+e",
+        .closeFile: "command+shift+w",
+        .runSQL: "command+r",
+        .cancelSQL: "command+.",
+        .newQuery: "command+n",
+        .autoAnalysis: "command+shift+a",
+        .toggleSidebar: "command+control+s",
+        .toggleInspector: "command+option+i",
+        .toggleSQL: "command+j",
+        .findFilter: "command+f"
+    ]
+    for (id, combo) in expected {
+        check("快捷键 \(id.rawValue) = \(combo)", MenuCatalog.item(id)?.combination == combo)
+    }
+    check("快捷键显示成符号", MenuCatalog.item(.exportFile)?.displayShortcut == "⇧⌘E")
+    check("关闭文件不占用 Command+W", MenuCatalog.item(.closeFile)?.modifiers.contains(.shift) == true)
+
+    // 可用状态：没有文件时只有打开和视图开关可点。
+    func enabledWhenFile(_ hasFile: Bool) -> [MenuItem.ID] {
+        menus.filter {
+            MenuCatalog.isEnabled($0.id, hasFile: hasFile, canExport: hasFile, canRunSQL: hasFile, canAnalyze: hasFile)
+        }.map(\.id)
+    }
+    let withoutFile = enabledWhenFile(false)
+    check("没有文件时导出置灰", !withoutFile.contains(.exportFile))
+    check("没有文件时关闭文件置灰", !withoutFile.contains(.closeFile))
+    check("没有文件时运行置灰", !withoutFile.contains(.runSQL))
+    check("没有文件时新建查询置灰", !withoutFile.contains(.newQuery))
+    check("没有文件时查找置灰", !withoutFile.contains(.findFilter))
+    check("没有文件时仍能打开", withoutFile.contains(.openFile))
+    check("没有文件时视图开关仍可用", withoutFile.contains(.toggleSidebar) && withoutFile.contains(.toggleSQL))
+    check("取消查询一直置灰", !MenuCatalog.isEnabled(
+        .cancelSQL, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: true
+    ))
+    let withFile = enabledWhenFile(true)
+    check("有文件后导出恢复", withFile.contains(.exportFile))
+    check("有文件后关闭恢复", withFile.contains(.closeFile))
+    check("有文件后运行恢复", withFile.contains(.runSQL))
+    check("有文件后新建查询恢复", withFile.contains(.newQuery))
+    check("一键分析跟着分析状态走", !MenuCatalog.isEnabled(
+        .autoAnalysis, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: false
+    ))
+    check("视图标题随开关变化", MenuCatalog.viewTitle(.toggleSQL, isOn: false) == "显示 SQL 抽屉")
+
+    // 菜单动作打到总线上，点一次走一次，不串项。
+    var hits: [String] = []
+    MainActor.assumeIsolated {
+        let bus = CommandBus()
+        bus.open = { hits.append("open") }
+        bus.export = { hits.append("export") }
+        bus.closeFile = { hits.append("close") }
+        bus.runSQL = { hits.append("run") }
+        bus.newQuery = { hits.append("new") }
+        bus.analyze = { hits.append("analyze") }
+        bus.showFilter = { hits.append("filter") }
+        for item in menus {
+            bus.perform(item.id)
+        }
+    }
+    check("取消不触发任何动作", hits.count == 7)
+    check("动作按菜单顺序触发", hits == ["open", "export", "close", "run", "new", "analyze", "filter"])
 }
 
 do {

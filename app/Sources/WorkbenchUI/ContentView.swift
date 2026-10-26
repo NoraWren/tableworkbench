@@ -126,7 +126,6 @@ struct ContentView: View {
                     Button(action: openPanel) {
                         Label("打开文件", systemImage: "folder")
                     }
-                    .keyboardShortcut("o", modifiers: .command)
                     .help("打开 CSV 或 TSV（Command+O）")
 
                     if let entry = model.selectedEntry {
@@ -135,7 +134,6 @@ struct ContentView: View {
                         } label: {
                             Label("筛选", systemImage: "line.3.horizontal.decrease.circle")
                         }
-                        .keyboardShortcut("f", modifiers: .command)
                         .help("添加筛选条件（Command+F）")
                         .popover(isPresented: $popover.filterShown, arrowEdge: .bottom) {
                             FilterPanel(columns: entry.columns, initial: entry.filter) { filter in
@@ -181,7 +179,6 @@ struct ContentView: View {
                         } label: {
                             Label("导出", systemImage: "square.and.arrow.up")
                         }
-                        .keyboardShortcut("e", modifiers: [.command, .shift])
                         .help("导出当前视图（Shift+Command+E）")
 
                         Button {
@@ -236,7 +233,6 @@ struct ContentView: View {
                         Label("SQL", systemImage: "chevron.up.square")
                     }
                     .help("展开或收起 SQL 抽屉（Command+J）")
-                    .keyboardShortcut("j", modifiers: .command)
 
                     Button {
                         inspectorShown.toggle()
@@ -244,7 +240,6 @@ struct ContentView: View {
                         Label("检查器", systemImage: "sidebar.right")
                     }
                     .help("显示或隐藏检查器（Command+Option+I）")
-                    .keyboardShortcut("i", modifiers: [.command, .option])
                 }
             }
         }
@@ -362,6 +357,9 @@ struct ContentView: View {
             if let entry = model.selectedEntry {
                 model.runAutoAnalysis(entryID: entry.id)
             }
+        }
+        bus.showFilter = {
+            popover.filterShown = true
         }
     }
 

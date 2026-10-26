@@ -9,20 +9,16 @@ public struct ViewCommands: Commands {
 
     public var body: some Commands {
         CommandMenu("视图") {
-            Button(sidebarShown ? "隐藏侧栏" : "显示侧栏") {
-                sidebarShown.toggle()
-            }
-            .keyboardShortcut("s", modifiers: [.command, .control])
-
-            Button(inspectorShown ? "隐藏检查器" : "显示检查器") {
-                inspectorShown.toggle()
-            }
-            .keyboardShortcut("i", modifiers: [.command, .option])
-
-            Button(sqlShown ? "隐藏 SQL 抽屉" : "显示 SQL 抽屉") {
-                sqlShown.toggle()
-            }
-            .keyboardShortcut("j", modifiers: .command)
+            toggle(.toggleSidebar, isOn: sidebarShown) { sidebarShown.toggle() }
+            toggle(.toggleInspector, isOn: inspectorShown) { inspectorShown.toggle() }
+            toggle(.toggleSQL, isOn: sqlShown) { sqlShown.toggle() }
         }
     }
+
+    private func toggle(_ id: MenuItem.ID, isOn: Bool, action: @escaping () -> Void) -> some View {
+        let item = MenuCatalog.item(id)!
+        return Button(MenuCatalog.viewTitle(id, isOn: isOn), action: action)
+            .keyboardShortcut(item.keyboardShortcut)
+    }
 }
+
