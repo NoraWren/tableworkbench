@@ -4,7 +4,7 @@ TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx file
 
 拖进一个 500MB 的 CSV，两秒左右打开，三百多万行也能滚动，数据不出本机。
 
-![拖进 500MB 的 CSV，三百多万行，滚动、排序、筛选都不用等](docs/media/demo.gif)
+![500MB 的 CSV，三百多万行，滚得动，点一下就把能看的图挑出来](docs/media/demo.gif)
 
 ## 三个数字
 
