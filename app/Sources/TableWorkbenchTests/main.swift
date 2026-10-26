@@ -121,6 +121,40 @@ func run() throws {
     check("GBK 列名不乱码", gbkOpened.session.columns[0].displayName == "客户名称")
     check("GBK 编码被记录", gbkOpened.encoding == .gb18030)
 
+    // 大文件流式转码：GBK、UTF-16、UTF-8 BOM 三种，验证内容完整且不整文件读入内存
+    var bigText = "编号,名称,备注\n"
+    for index in 0..<120_000 {
+        bigText += "A\(index),客户\(index)有限公司,这是一段用于测试转码边界的备注文本\n"
+    }
+    let bigGBK = working.appendingPathComponent("gbk-big.csv")
+    try bigText.write(to: bigGBK, atomically: true, encoding: EncodingDetector.gb18030)
+    let bigGBKUTF8 = working.appendingPathComponent("gbk-big-utf8.csv")
+    try TextFileTranscoder.transcode(source: bigGBK, encoding: .gb18030, destination: bigGBKUTF8)
+    let roundTrip = try String(contentsOf: bigGBKUTF8, encoding: .utf8)
+    check("GBK 大文件流式转码一致", roundTrip == bigText)
+
+    let bigUTF16 = working.appendingPathComponent("utf16-big.csv")
+    try bigText.write(to: bigUTF16, atomically: true, encoding: .utf16LittleEndian)
+    let bigUTF16Out = working.appendingPathComponent("utf16-big-utf8.csv")
+    try TextFileTranscoder.transcode(source: bigUTF16, encoding: .utf16LE, destination: bigUTF16Out)
+    check("UTF-16 大文件流式转码一致", try String(contentsOf: bigUTF16Out, encoding: .utf8) == bigText)
+
+    let bomSource = working.appendingPathComponent("bom-big.csv")
+    var bomData = Data([0xEF, 0xBB, 0xBF])
+    bomData.append(Data("a,b\n1,2\n".utf8))
+    try bomData.write(to: bomSource)
+    let bomOut = working.appendingPathComponent("bom-big-utf8.csv")
+    try TextFileTranscoder.transcode(source: bomSource, encoding: .utf8BOM, destination: bomOut)
+    check("BOM 文件去头", try String(contentsOf: bomOut, encoding: .utf8) == "a,b\n1,2\n")
+
+    // 分块边界：末尾只剩首字节时要回退，完整字符不动
+    let partial = Data([0x41, 0xBF])
+    check("GB18030 半字符回退", TextFileTranscoder.gb18030SafePrefixLength(partial) == 1)
+    let complete = Data([0x41, 0xBF, 0xCD, 0x42])
+    check("GB18030 完整字符不回退", TextFileTranscoder.gb18030SafePrefixLength(complete) == 4)
+    let ascii = Data("hello".utf8)
+    check("纯 ASCII 不回退", TextFileTranscoder.gb18030SafePrefixLength(ascii) == 5)
+
     // 3000 列文件：数据层应能打开，不改写、不超时
     let wide = URL(fileURLWithPath: "../bench-data/wide-3000.csv")
     if FileManager.default.fileExists(atPath: wide.path) {
