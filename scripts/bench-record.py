@@ -71,6 +71,20 @@ def machine_label():
     return f"{model} / {cpu} / {gigabytes}"
 
 
+def load_average():
+    """取 1 分钟负载。打开和取块都吃 CPU，负载高的机器上同一份代码能差 20%。"""
+    done = subprocess.run(["sysctl", "-n", "vm.loadavg"], capture_output=True, text=True)
+    if done.returncode != 0:
+        return None
+    parts = done.stdout.replace("{", " ").replace("}", " ").split()
+    for part in parts:
+        try:
+            return float(part)
+        except ValueError:
+            continue
+    return None
+
+
 def extract_json(text, source):
     """日志里 JSON 之外还混着 /usr/bin/time 的统计行，找第一段配平的 {...}。"""
     start = text.find("{")
@@ -143,6 +157,8 @@ def measure(runs):
                               "-c", "release", "--show-bin-path"],
                              capture_output=True, text=True)
     binary = Path(located.stdout.strip()) / "TableWorkbenchBench"
+    load = load_average()
+    print(f"负载：{load if load is not None else '未知'}（1 分钟）")
 
     opens, memories, firsts, hundreds, details = [], [], [], [], []
     for index in range(1, runs + 1):
@@ -165,6 +181,7 @@ def measure(runs):
     return {
         "runs": runs,
         "cacheState": "cold",
+        "loadAverage": load,
         "open": statistics.median(opens),
         "memory": statistics.median(memories),
         "block1": statistics.median(firsts),
@@ -413,6 +430,8 @@ def main():
     print(f"提交：{commit}")
     if payload.get("details"):
         print(f"轮数：{payload['runs']}，四项取中位")
+    if payload.get("loadAverage") is not None:
+        print(f"负载：{payload['loadAverage']}（1 分钟，脚本自动记录）")
     if state == "cold":
         print("口径：冷打开（每轮用空的 Parquet 缓存目录）")
     elif state == "hit":
@@ -456,6 +475,9 @@ def main():
         for label, old_value, new_value, percent, note in degraded:
             print(f"  {label:<8} {old_value} → {new_value}  +{percent:.0f}%（基线 {note}）")
         print("  写进提交说明：原因和打算怎么办。")
+        load = payload.get("loadAverage")
+        if load is not None and load >= 8:
+            print(f"  当时负载 {load}，比核数还高。先排除机器忙，再决定要不要改代码。")
     elif baseline_cells is not None:
         print()
         print("四项都在 10% 以内。")
