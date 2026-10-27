@@ -159,7 +159,8 @@ AIClient                协议适配、上下文构造、流式解析（旁路�
 └── scripts/
     ├── make-bench-data.sh       # 生成基准数据集
     ├── bench.sh                 # 跑性能基准并输出报告
-    └── bench-launch.py          # 冷启动计时，脚本自己拉起和退出应用
+    ├── bench-launch.py          # 冷启动计时，脚本自己拉起和退出应用
+    └── bench-record.py          # 跑基准并追加到 docs/bench-history.md
 ```
 
 `TableWorkbench` 是模块名占位，产品名待定，见 R-DEC-06。
@@ -212,6 +213,7 @@ xcodebuild -scheme TableWorkbench -configuration Debug build
 
 # 性能基准（M1 之后必须有）
 ./scripts/make-bench-data.sh && ./scripts/bench.sh
+./scripts/bench-record.py      # 跑基准并追加一行记录，退化超过 10% 返回非零
 
 # 冷启动（先装 release 包，脚本自己拉起和退出应用；开头会打系统负载）
 BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py --rounds 20
@@ -221,7 +223,7 @@ BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py -
 
 1. 需求文件里的验收项全部勾掉；
 2. 构建无新增警告；
-3. `scripts/bench.sh` 的结果不比上一次退化超过 10%；
+3. `scripts/bench-record.py` 四项都不比同口径的上一次退化超过 10%（退出码 0）；
 4. 能录一段不超过 30 秒的演示，看的人不用解释就明白在干什么。
 
 ## 10. 容易踩的坑
