@@ -102,11 +102,165 @@ func render<Content: View>(
     window.orderOut(nil)
 }
 
+/// 查真实视图树里哪些视图注册了拖放类型。访达拖文件时，事件只会投给
+/// registeredDraggedTypes 匹配的视图；这里数不到，就说明拖拽根本进不来。
+@MainActor
+func registeredDropViews(in view: NSView, depth: Int = 0) -> [String] {
+    var found: [String] = []
+    if !view.registeredDraggedTypes.isEmpty {
+        let types = view.registeredDraggedTypes.map { $0.rawValue }.sorted().joined(separator: ", ")
+        let indent = String(repeating: "  ", count: depth)
+        found.append(indent + String(describing: type(of: view)) + " -> " + types)
+    }
+    for subview in view.subviews {
+        found += registeredDropViews(in: subview, depth: depth + 1)
+    }
+    return found
+}
+
+/// 只够喂剪贴板的假拖放信息，给探针造一个悬停状态。
+final class AuditDraggingInfo: NSObject, NSDraggingInfo {
+    let draggingPasteboard: NSPasteboard
+    init(pasteboard: NSPasteboard) { self.draggingPasteboard = pasteboard }
+
+    var draggingDestinationWindow: NSWindow? { nil }
+    var draggingSourceOperationMask: NSDragOperation { .copy }
+    var draggingLocation: NSPoint { .zero }
+    var draggedImageLocation: NSPoint { .zero }
+    var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 0 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 1
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    func enumerateDraggingItems(
+        options enumOpts: NSDraggingItemEnumerationOptions,
+        for view: NSView?,
+        classes classArray: [AnyClass],
+        searchOptions: [NSPasteboard.ReadingOptionKey: Any],
+        using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void
+    ) {}
+    func resetSpringLoading() {}
+}
+
+/// 拖放落点的离线诊断。只回答「谁注册了、盖多大面积、子树排第几层」，
+/// 判断不了系统有没有把拖拽送进来——那必须在真窗口里用鼠标拖一次。
+@MainActor
+func dropProbeReport() -> [String] {
+    var lines: [String] = []
+    let probe = WorkspaceModel()
+    let host = NSHostingView(rootView: WorkbenchRootView(model: probe))
+    host.frame = NSRect(x: 0, y: 0, width: 1200, height: 800)
+    let window = NSWindow(
+        contentRect: host.frame,
+        styleMask: [.titled],
+        backing: .buffered,
+        defer: false
+    )
+    window.contentView = host
+    window.orderBack(nil)
+    host.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+
+    // 拖放容器可能是窗口的内容视图（把原来的 NSHostingView 包了一层），
+    // 所以从窗口根往下数，别从 host 开始，否则会漏掉外面那层。
+    let root = window.contentView ?? host
+    let rootArea = root.bounds.width * root.bounds.height
+    for line in registeredDropViews(in: root) {
+        lines.append("注册：" + line)
+    }
+    // 深度优先找出所有注册了拖放类型的视图，报位置和覆盖面积。
+    func walk(_ view: NSView, depth: Int) {
+        if !view.registeredDraggedTypes.isEmpty {
+            let frameInHost = view.convert(view.bounds, to: root)
+            let ratio = rootArea > 0 ? frameInHost.width * frameInHost.height / rootArea : 0
+            lines.append("范围：" + String(repeating: "  ", count: depth)
+                + String(describing: type(of: view))
+                + " " + NSStringFromRect(frameInHost)
+                + " 覆盖 " + String(format: "%.0f%%", ratio * 100))
+        }
+        for subview in view.subviews { walk(subview, depth: depth + 1) }
+    }
+    walk(root, depth: 0)
+
+    // 拖放目标在 host 的兄弟层里的第几个，越靠后越在上层。
+    for (index, subview) in root.subviews.enumerated() {
+        let hasDrop = !registeredDropViews(in: subview).isEmpty
+        lines.append("兄弟层 " + String(index) + "：" + String(describing: type(of: subview))
+            + (hasDrop ? "（含拖放目标）" : ""))
+    }
+    // 模拟文件悬停在窗口上，截一张高亮态。真实拖拽要靠人手，这里只核对外观。
+    if let container = window.contentView as? FileDropContainerView {
+        let board = NSPasteboard(name: NSPasteboard.Name("tw-audit-drop"))
+        board.clearContents()
+        board.writeObjects([URL(fileURLWithPath: "/tmp/bench-data/wide-100k.csv") as NSURL])
+        let op = container.draggingEntered(AuditDraggingInfo(pasteboard: board))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        lines.append("悬停：返回 " + String(describing: op) + "，边框 " + String(format: "%.0f", container.layer?.borderWidth ?? 0) + "pt")
+        if let rep = container.bitmapImageRepForCachingDisplay(in: container.bounds) {
+            container.cacheDisplay(in: container.bounds, to: rep)
+            if let png = rep.representation(using: .png, properties: [:]) {
+                try? png.write(to: outputDirectory.appendingPathComponent("drop-hover.png"))
+            }
+        }
+        container.draggingExited(AuditDraggingInfo(pasteboard: board))
+        lines.append("移出：边框 " + String(format: "%.0f", container.layer?.borderWidth ?? 0) + "pt")
+        board.releaseGlobally()
+    }
+
+    // 换掉 contentView 会不会把工具栏挤坏：造一个带工具栏、统一标题栏的窗口，
+    // 装完容器再数一遍，工具栏还在、标题栏高度没变。
+    do {
+        let toolbarWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        toolbarWindow.toolbarStyle = .unified
+        let toolbar = NSToolbar(identifier: "audit-toolbar")
+        toolbarWindow.toolbar = toolbar
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        toolbarWindow.contentView = content
+        toolbarWindow.orderBack(nil)
+        let before = toolbarWindow.contentLayoutRect.size
+        WindowDropInstaller.install(on: toolbarWindow) { _ in }
+        toolbarWindow.layoutIfNeeded()
+        let after = toolbarWindow.contentLayoutRect.size
+        lines.append("工具栏：装前内容区 " + NSStringFromSize(before) + "，装后 " + NSStringFromSize(after)
+            + "，toolbar " + (toolbarWindow.toolbar == nil ? "没了" : "还在"))
+        toolbarWindow.orderOut(nil)
+    }
+
+    // 换成拖放容器之后再截一张，确认渲染没被这一层搞坏。
+    if let rootView = window.contentView,
+       let rep = rootView.bitmapImageRepForCachingDisplay(in: rootView.bounds) {
+        rootView.cacheDisplay(in: rootView.bounds, to: rep)
+        if let png = rep.representation(using: .png, properties: [:]) {
+            let path = outputDirectory.appendingPathComponent("drop-root.png")
+            try? png.write(to: path)
+            lines.append("截图：" + path.path)
+        }
+    }
+    window.orderOut(nil)
+    return lines
+}
+
 MainActor.assumeIsolated {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
 
     do {
+        // 拖放探针：R-IMP-01 第一条验收要真机才能验，这里只把能离线确定的事实打出来。
+        // TW_DROP_PROBE=1 才跑，平时不占渲染时间。
+        if ProcessInfo.processInfo.environment["TW_DROP_PROBE"] != nil {
+            for line in dropProbeReport() {
+                print("拖放：" + line)
+            }
+        }
+
         try render("pivot", size: NSSize(width: 560, height: 400)) {
             PivotPanel(columns: columns) { _ in }
         }

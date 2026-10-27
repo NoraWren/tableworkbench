@@ -51,6 +51,33 @@ func expectThrows(_ name: String, _ body: () throws -> Void) {
     }
 }
 
+/// 假的拖放信息，只够喂 pasteboard，用来在测试里走一遍 AppKit 的拖放回调。
+final class FakeDraggingInfo: NSObject, NSDraggingInfo {
+    let draggingPasteboard: NSPasteboard
+    init(pasteboard: NSPasteboard) { self.draggingPasteboard = pasteboard }
+
+    var draggingDestinationWindow: NSWindow? { nil }
+    var draggingSourceOperationMask: NSDragOperation { .copy }
+    var draggingLocation: NSPoint { .zero }
+    var draggedImageLocation: NSPoint { .zero }
+    var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 0 }
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 1
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    func enumerateDraggingItems(
+        options enumOpts: NSDraggingItemEnumerationOptions,
+        for view: NSView?,
+        classes classArray: [AnyClass],
+        searchOptions: [NSPasteboard.ReadingOptionKey: Any],
+        using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void
+    ) {}
+    func resetSpringLoading() {}
+}
+
 func run() throws {
     // 编码探测
     check("UTF-8 识别", EncodingDetector.detect(sample: "客户,金额".data(using: .utf8)!) == .utf8)
@@ -1760,6 +1787,121 @@ func run() throws {
     check("空结果不给截断提示", emptyStatus.truncationNotice == nil)
     check("摘要五位数加千分位", SQLResultStatus.grouped(1234567) == "1,234,567")
     check("摘要三位数不加分隔", SQLResultStatus.grouped(999) == "999")
+
+    // 访达拖文件（R-IMP-01）：接收器得是窗口内容视图那一层，注册 public.file-url 并铺满。
+    // SwiftUI 的 dropDestination 生成的是分栏视图的兄弟层，AppKit 沿父链找拖放目标摸不到它，
+    // 所以换成窗口层的自绘容器，见 WorkbenchUI/DropTarget.swift。
+    do {
+        _ = NSApplication.shared
+        let model = MainActor.assumeIsolated { WorkspaceModel() }
+        let hosting = NSHostingView(rootView: WorkbenchRootView(model: model))
+        hosting.frame = NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let window = NSWindow(
+            contentRect: hosting.frame,
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = hosting
+        window.orderBack(nil)
+        hosting.layoutSubtreeIfNeeded()
+
+        func installed() -> FileDropContainerView? {
+            MainActor.assumeIsolated { window.contentView as? FileDropContainerView }
+        }
+        let deadline = Date().addingTimeInterval(10)
+        while installed() == nil && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+        }
+        // 容器换上后 SwiftUI 还可能再挪一次 hosting，多跑几圈确认稳定。
+        for _ in 0..<20 { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+        var delivered2: [URL] = []
+        let container = installed()
+        check("窗口内容视图换成拖放容器", container != nil)
+        check("容器注册了 file-url", container?.registeredDraggedTypes.contains(.fileURL) == true)
+        if let container {
+            container.layoutSubtreeIfNeeded()
+            check(
+                "容器铺满窗口内容区",
+                abs(container.bounds.width - hosting.frame.width) < 1
+                    && abs(container.bounds.height - hosting.frame.height) < 1
+            )
+            check("原视图还在容器里", container.subviews.contains(where: { $0 === hosting }))
+            check("没有套第二层", container.subviews.count == 1)
+
+            // 重复安装只换处理函数，不叠层。
+            var delivered: [URL] = []
+            let again = MainActor.assumeIsolated {
+                WindowDropInstaller.install(on: window) { delivered = $0 }
+            }
+            check("重复安装还是同一个容器", again === container)
+            check("重复安装不叠层", container.subviews.count == 1)
+            let sample = URL(fileURLWithPath: "/tmp/drop-sample.csv")
+            MainActor.assumeIsolated { container.box.handle([sample]) }
+            check("处理函数跟着换", delivered == [sample])
+        }
+        // 进出全屏时内容视图会被 AppKit 重建，接收器要自己补回来。
+        // 这里直接模拟那一下：把 contentView 换回 hosting，再发通知，断言容器重新装上。
+        if let container {
+            MainActor.assumeIsolated {
+                window.contentView = hosting
+                hosting.frame = window.contentLayoutRect
+                NotificationCenter.default.post(
+                    name: NSWindow.didExitFullScreenNotification, object: window
+                )
+            }
+            let restoreDeadline = Date().addingTimeInterval(10)
+            while installed() == nil && Date() < restoreDeadline {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+            }
+            for _ in 0..<10 { RunLoop.current.run(until: Date().addingTimeInterval(0.02)) }
+            check("退出全屏后容器自动补回来", installed() != nil)
+            check("补回来后原视图仍在里面", installed()?.subviews.contains(where: { $0 === hosting }) == true)
+        }
+        window.orderOut(nil)
+
+        // 剪贴板只认本地文件，字符串和其它类型一律不要。
+        let board = NSPasteboard(name: NSPasteboard.Name("tw-drop-test"))
+        board.clearContents()
+        let fileURL = URL(fileURLWithPath: "/tmp/bench-data/wide-100k.csv")
+        board.writeObjects([fileURL as NSURL])
+        check("从剪贴板读出文件 URL", FileDropContainerView.fileURLs(in: board) == [fileURL])
+        board.clearContents()
+        board.writeObjects(["一段文字" as NSString])
+        check("文字不算文件", FileDropContainerView.fileURLs(in: board).isEmpty)
+
+        // 真的走一遍 AppKit 的拖放回调：进窗口、更新、松手，URL 要交到处理函数手里。
+        let dropBoard = NSPasteboard(name: NSPasteboard.Name("tw-drop-sim"))
+        dropBoard.clearContents()
+        dropBoard.writeObjects([fileURL as NSURL])
+        let fake = FakeDraggingInfo(pasteboard: dropBoard)
+        let target = MainActor.assumeIsolated {
+            FileDropContainerView(frame: NSRect(x: 0, y: 0, width: 800, height: 600),
+                                  box: DropHandlerBox { delivered2 = $0 })
+        }
+        let enter = MainActor.assumeIsolated { target.draggingEntered(fake) }
+        check("拖进来时接受复制", enter == .copy)
+        let update = MainActor.assumeIsolated { target.draggingUpdated(fake) }
+        check("拖动过程中保持接受", update == .copy)
+        check("松手前问一句也说得通", MainActor.assumeIsolated { target.prepareForDragOperation(fake) })
+        let done = MainActor.assumeIsolated { target.performDragOperation(fake) }
+        check("松手后接收成功", done)
+        check("URL 落到处理函数", delivered2 == [fileURL])
+
+        // 只拖一段文字进来，一个字节都不该交出去。
+        let textBoard = NSPasteboard(name: NSPasteboard.Name("tw-drop-text"))
+        textBoard.clearContents()
+        textBoard.writeObjects(["不是文件" as NSString])
+        let plain = FakeDraggingInfo(pasteboard: textBoard)
+        check("文字拖进来不接", MainActor.assumeIsolated { target.draggingEntered(plain) } == [])
+        delivered2 = []
+        check("文字松手也不收", !MainActor.assumeIsolated { target.performDragOperation(plain) })
+        check("文字没触发打开", delivered2.isEmpty)
+
+        board.releaseGlobally()
+        dropBoard.releaseGlobally()
+        textBoard.releaseGlobally()
+    }
 
     // 菜单表：需求里列的每一项都要有快捷键，且组合不能撞（R-SHELL-02）。
     let menus = MenuCatalog.all

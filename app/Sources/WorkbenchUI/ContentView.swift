@@ -247,10 +247,13 @@ struct ContentView: View {
             InspectorView(model: model)
                 .inspectorColumnWidth(min: 220, ideal: 260, max: 360)
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            handleOpen(urls: urls)
-            return true
-        }
+        // 访达拖文件走窗口层接收，原因见 DropTarget.swift 顶部注释。
+        .background(
+            DropTargetInstaller { urls in
+                handleOpen(urls: urls)
+            }
+            .frame(width: 0, height: 0)
+        )
         .sheet(isPresented: $sheetPrompt.isPresented) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("选择工作表").font(.headline)
