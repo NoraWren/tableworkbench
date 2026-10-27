@@ -28,6 +28,7 @@
 - 只接本地文件：剪贴板用 `urlReadingFileURLsOnly` 读，纯文字、网页图片一律返回不接收，不弹提示。
 - 悬停高亮：拖入时给容器 layer 描 3pt 强调色边框，松手或移出撤掉，不进布局。
 - 验证：`TableWorkbenchTests` 造真 `NSWindow`，断言 contentView 是容器、注册了 `.fileURL`、铺满内容区、只一层、重复安装不叠层；再用假 `NSDraggingInfo` 按 AppKit 顺序走完 `draggingEntered` → `draggingUpdated` → `prepareForDragOperation` → `performDragOperation`，断言 URL 交到处理函数；换成纯文字断言全部拒绝。`TW_DROP_PROBE=1 TableWorkbenchUIAudit` 打印注册视图与覆盖面积（1200×828 = 100%）。
+- 证据：悬停高亮态离屏截图 [drop-window-highlight.png](../media/verification/drop-window-highlight.png)（真实视图树，模拟文件悬停，边框 3pt）。工具栏窗口换 contentView 前后内容区都是 900×628，toolbar 没丢。
 - 没证明的：系统真把访达的拖拽会话送进来这一步，测试进程造不出 X 事件，只能真机鼠标拖一次。
 
 ## R-IMP-02 格式矩阵
