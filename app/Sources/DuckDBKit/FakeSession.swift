@@ -50,6 +50,10 @@ public final class FakeSession: QuerySession, @unchecked Sendable {
         SQLResult.empty
     }
 
+    public func pivotWithHeader(spec: PivotSpec) throws -> PivotResult {
+        PivotResult(result: .empty, header: PivotHeader.build(spec: spec, combos: []))
+    }
+
     public func pivotSQL(spec: PivotSpec) throws -> String {
         "SELECT 1"
     }

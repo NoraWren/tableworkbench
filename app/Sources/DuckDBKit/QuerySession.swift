@@ -16,6 +16,8 @@ public protocol QuerySession: AnyObject, Sendable {
     func runSQL(_ sql: String) throws -> SQLResult
     /// 按透视配置生成交叉表。
     func pivot(spec: PivotSpec) throws -> SQLResult
+    /// 透视结果连表头层级一起返回。界面靠它画多层表头。
+    func pivotWithHeader(spec: PivotSpec) throws -> PivotResult
     /// 只把透视配置翻译成 SQL，不执行。给“在 SQL 抽屉复现”用。
     func pivotSQL(spec: PivotSpec) throws -> String
     /// 统计一列。源表跟随当前筛选。

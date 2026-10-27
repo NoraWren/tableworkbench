@@ -150,11 +150,19 @@ public struct SQLEditor: View {
 public struct SQLResultView: View {
     let result: SQLResult
     let title: String
+    /// 透视结果的表头层级。普通 SQL 查询没有维度概念，传 nil 走单行表头。
+    let header: PivotHeader?
     let onClose: () -> Void
 
-    public init(result: SQLResult, title: String, onClose: @escaping () -> Void) {
+    public init(
+        result: SQLResult,
+        title: String,
+        header: PivotHeader? = nil,
+        onClose: @escaping () -> Void
+    ) {
         self.result = result
         self.title = title
+        self.header = header
         self.onClose = onClose
     }
 
@@ -192,6 +200,7 @@ public struct SQLResultView: View {
                     // 行数按实际拿到的行算：结果被截断时两者相等，
                     // 万一少了行也别在末尾刷一片假的 NULL。
                     rowCount: min(result.rowCount, result.rows.count),
+                    header: header,
                     provider: { offset, size in
                         let start = max(0, min(offset, result.rows.count))
                         let end = max(start, min(offset + size, result.rows.count))

@@ -387,7 +387,11 @@ struct ContentView: View {
             ProgressView("正在生成图表…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let result = model.sqlResult {
-            SQLResultView(result: result, title: model.resultTitle ?? "查询结果") {
+            SQLResultView(
+                result: result,
+                title: model.resultTitle ?? "查询结果",
+                header: model.pivotHeader
+            ) {
                 model.clearSQLResult()
             }
         } else if let entry = model.selectedEntry {

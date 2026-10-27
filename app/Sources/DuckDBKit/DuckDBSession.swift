@@ -656,7 +656,13 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         }
     }
 
+    /// 透视结果只要数据，图表和大部分调用方走这条。表头层级走 `pivotWithHeader`。
     public func pivot(spec: PivotSpec) throws -> SQLResult {
+        try pivotWithHeader(spec: spec).result
+    }
+
+    /// 透视结果带表头层级，给结果网格渲染多层表头用。
+    public func pivotWithHeader(spec: PivotSpec) throws -> PivotResult {
         lock.lock()
         defer { lock.unlock() }
 
@@ -667,8 +673,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         let started = Foundation.Date()
 
         do {
-            let sql = try pivotStatement(spec: spec, connection: connection, table: table)
-            let result = try executeSelect(sql, connection: connection, started: started)
+            let plan = try pivotPlan(spec: spec, connection: connection, table: table)
+            let result = try executeSelect(plan.sql, connection: connection, started: started)
             guard result.rowCount <= 5000 else {
                 throw ImportError(
                     userMessage: "行维度太多了",
@@ -676,7 +682,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                     recoverySuggestion: "换一个基数更低的字段，或先加筛选。"
                 )
             }
-            return result
+            // 表头层级由配置和列组合推出来，不占查询时间，随结果一起回到主线程。
+            return PivotResult(result: result, header: PivotHeader.build(spec: spec, combos: plan.combos))
         } catch let error as ImportError {
             throw error
         } catch {
@@ -732,7 +739,17 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         return hasResultTable ? "\"__result\"" : "\"__base\""
     }
 
+    /// 拼 SQL 的同时把列组合带出来。表头层级要靠这份组合算，两次查库没必要。
+    private struct PivotPlan {
+        let sql: String
+        let combos: [[String]]
+    }
+
     private func pivotStatement(spec: PivotSpec, connection: Connection, table: String) throws -> String {
+        try pivotPlan(spec: spec, connection: connection, table: table).sql
+    }
+
+    private func pivotPlan(spec: PivotSpec, connection: Connection, table: String) throws -> PivotPlan {
         // 面板里的筛选和表格上的筛选叠加，两个都生效。
         let whereSQL = SQLBuilder.whereClause(spec.filter)
         let fromSQL = whereSQL.isEmpty ? table : "\(table) \(whereSQL)"
@@ -743,6 +760,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             .joined(separator: ", ")
 
         var selectParts = [rowSelect]
+        var combos: [[String]] = []
         if spec.columns.isEmpty {
             for value in spec.values {
                 selectParts.append("\(aggregateSQL(value, condition: nil)) AS \(SQLBuilder.quoteIdentifier(value.title))")
@@ -750,8 +768,10 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         } else {
             let columnSQL = spec.columns.map { "\(pivotLabel($0)) AS \(SQLBuilder.quoteIdentifier($0))" }
                 .joined(separator: ", ")
+            // 表头按前缀合并，组合必须按维度顺序排。DuckDB 不保证 DISTINCT 的顺序，这里显式排。
+            let orderSQL = spec.columns.map { pivotLabel($0) }.joined(separator: ", ")
             let combosResult = try connection.query(
-                "SELECT DISTINCT \(columnSQL) FROM \(fromSQL) LIMIT 201"
+                "SELECT DISTINCT \(columnSQL) FROM \(fromSQL) ORDER BY \(orderSQL) LIMIT 201"
             )
             let comboCount = Int(combosResult.rowCount)
             guard comboCount <= 200 else {
@@ -769,7 +789,6 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             for index in 0..<Int(combosResult.columnCount) {
                 typed.append(combosResult.column(at: DBInt(index)).cast(to: String.self))
             }
-            var combos: [[String]] = []
             combos.reserveCapacity(comboCount)
             for rowIndex in 0..<comboCount {
                 var combo: [String] = []
@@ -792,7 +811,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
         // 多取一行用来判断基数：超过上限就报错，不再单独跑一遍 DISTINCT 计数。
         let rowLimit = 5001
-        return "SELECT \(selectParts.joined(separator: ", ")) FROM \(fromSQL) GROUP BY \(rowSQL) ORDER BY \(rowAliases) LIMIT \(rowLimit)"
+        let sql = "SELECT \(selectParts.joined(separator: ", ")) FROM \(fromSQL) GROUP BY \(rowSQL) ORDER BY \(rowAliases) LIMIT \(rowLimit)"
+        return PivotPlan(sql: sql, combos: combos)
     }
 
     private func aggregateSQL(_ value: PivotValue, condition: String?) -> String {

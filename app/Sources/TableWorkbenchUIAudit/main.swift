@@ -37,12 +37,23 @@ func sampleResult(rowCount: Int, truncated: Bool, elapsed: Double) -> SQLResult 
     )
 }
 
+/// 在视图树里找第一个 NSTableView，滚动与冻结的行为得直接对真表动手才能核对。
+@MainActor
+func findTableView(in view: NSView) -> NSTableView? {
+    if let table = view as? NSTableView { return table }
+    for subview in view.subviews {
+        if let found = findTableView(in: subview) { return found }
+    }
+    return nil
+}
+
 /// 用 NSHostingView 包真实的 SwiftUI 视图再抓位图：Button、TextField、Picker 都能画出来。
 @MainActor
 func render<Content: View>(
     _ name: String,
     size: NSSize,
     dark: Bool = false,
+    prepare: @MainActor (NSView) -> Void = { _ in },
     @ViewBuilder content: () -> Content
 ) throws {
     let host = NSHostingView(rootView: content())
@@ -73,6 +84,10 @@ func render<Content: View>(
     // SwiftUI 首帧要等一轮 runloop 才布局完。
     RunLoop.current.run(until: Date().addingTimeInterval(0.45))
     host.layoutSubtreeIfNeeded()
+    // 首帧结束后再改滚动位置这类状态，改完要等重绘。
+    prepare(host)
+    host.layoutSubtreeIfNeeded()
+    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
 
     guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
         throw NSError(domain: "uiaudit", code: 1, userInfo: [NSLocalizedDescriptionKey: "拿不到位图"])
@@ -159,6 +174,79 @@ MainActor.assumeIsolated {
             SQLResultView(
                 result: SQLResult(columns: columns, rows: [], rowCount: 0, elapsed: 0.012, truncated: false),
                 title: "查询结果"
+            ) {}
+        }
+        // 透视结果的多层表头：行维度冻结在左侧、纵向贯穿，列维度按渠道合并（R-PVT-04）。
+        let pivotSpec = PivotSpec(
+            rows: ["区域", "城市"],
+            columns: ["渠道"],
+            values: [
+                PivotValue(column: "金额", aggregate: .sum),
+                PivotValue(column: "数量", aggregate: .sum)
+            ]
+        )
+        let pivotCombos = [["直销"], ["线上"], ["代理"]]
+        let pivotHeader = PivotHeader.build(spec: pivotSpec, combos: pivotCombos)
+        var pivotResultColumns = [
+            ColumnInfo(name: "区域", displayName: "区域", typeName: "VARCHAR", kind: .text),
+            ColumnInfo(name: "城市", displayName: "城市", typeName: "VARCHAR", kind: .text)
+        ]
+        for value in pivotSpec.values {
+            for combo in pivotCombos {
+                let name = value.title + " / " + combo.joined(separator: " / ")
+                pivotResultColumns.append(
+                    ColumnInfo(name: name, displayName: name, typeName: "BIGINT", kind: .integer)
+                )
+            }
+        }
+        try render("sql-result-pivot-header", size: NSSize(width: 860, height: 300)) {
+            SQLResultView(
+                result: SQLResult(
+                    columns: pivotResultColumns,
+                    rows: [
+                        ["华南", "广州"] + (0..<6).map { String(1200 + $0 * 37) },
+                        ["华东", "上海"] + (0..<6).map { String(980 + $0 * 21) }
+                    ],
+                    rowCount: 2,
+                    elapsed: 0.044,
+                    truncated: false
+                ),
+                title: "透视结果",
+                header: pivotHeader
+            ) {}
+        }
+        // 横向滚到右边：行维度列和表头必须留在原处（R-PVT-04 冻结）。
+        try render(
+            "sql-result-pivot-header-scrolled",
+            size: NSSize(width: 620, height: 300),
+            prepare: { root in
+                guard let table = findTableView(in: root),
+                      let scroll = table.enclosingScrollView else { return }
+                scroll.contentView.scroll(to: NSPoint(x: 430, y: scroll.contentView.bounds.minY))
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+        ) {
+            SQLResultView(
+                result: SQLResult(
+                    columns: pivotResultColumns,
+                    rows: [
+                        ["华南", "广州"] + (0..<6).map { String(1200 + $0 * 37) },
+                        ["华东", "上海"] + (0..<6).map { String(980 + $0 * 21) }
+                    ],
+                    rowCount: 2,
+                    elapsed: 0.044,
+                    truncated: false
+                ),
+                title: "透视结果",
+                header: pivotHeader
+            ) {}
+        }
+        // 单行表头的普通查询，确认没有层级信息时还是原来那一行（回归）。
+        try render("sql-result-flat-header", size: NSSize(width: 760, height: 240)) {
+            SQLResultView(
+                result: sampleResult(rowCount: 2, truncated: false, elapsed: 0.031),
+                title: "查询结果",
+                header: PivotHeader.singleRow(titles: columns.map(\.displayName))
             ) {}
         }
         try render("settings", size: NSSize(width: 520, height: 320)) {

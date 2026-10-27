@@ -81,6 +81,8 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var isQuerying = false
     @Published public private(set) var sqlResult: SQLResult?
+    /// 透视结果带多层表头，SQL 抽屉的普通查询为 nil，网格按单层画。
+    @Published public private(set) var pivotHeader: PivotHeader?
     @Published public private(set) var resultTitle: String?
     @Published public private(set) var isRunningSQL = false
     @Published public private(set) var columnStats: ColumnStats?
@@ -265,6 +267,8 @@ public final class WorkspaceModel: ObservableObject {
         let session = entries[index].session
         isRunningSQL = true
         sqlResult = nil
+        // 普通查询没有维度概念，表头回到单层。
+        pivotHeader = nil
         resultTitle = "查询结果"
 
         Task {
@@ -295,13 +299,14 @@ public final class WorkspaceModel: ObservableObject {
         let session = entries[index].session
         isRunningSQL = true
         sqlResult = nil
+        pivotHeader = nil
         resultTitle = "透视结果"
         error = nil
 
         Task {
-            let outcome = await Task.detached(priority: .userInitiated) { () -> (SQLResult?, ImportError?) in
+            let outcome = await Task.detached(priority: .userInitiated) { () -> (PivotResult?, ImportError?) in
                 do {
-                    return (try session.pivot(spec: spec), nil)
+                    return (try session.pivotWithHeader(spec: spec), nil)
                 } catch let importError as ImportError {
                     return (nil, importError)
                 } catch {
@@ -311,7 +316,8 @@ public final class WorkspaceModel: ObservableObject {
 
             guard isOpen(entryID) else { return }
             if let result = outcome.0 {
-                sqlResult = result
+                sqlResult = result.result
+                pivotHeader = result.header
             } else {
                 error = outcome.1
             }
@@ -529,6 +535,7 @@ public final class WorkspaceModel: ObservableObject {
 
     public func clearSQLResult() {
         sqlResult = nil
+        pivotHeader = nil
         resultTitle = nil
     }
 
@@ -583,6 +590,7 @@ public final class WorkspaceModel: ObservableObject {
         autoCharts = nil
         isAnalyzing = false
         sqlResult = nil
+        pivotHeader = nil
         resultTitle = nil
         isRunningSQL = false
     }

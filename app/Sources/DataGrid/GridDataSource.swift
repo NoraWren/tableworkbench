@@ -14,6 +14,8 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
     var computedColumnNames: Set<String> = []
     weak var contentTableView: NSTableView?
     weak var rowNumbersView: NSView?
+    weak var frozenView: FrozenColumnsView?
+    weak var scrollView: NSScrollView?
 
     private let cache = BlockCache(capacity: 8)
     private let cellIdentifier = NSUserInterfaceItemIdentifier("data-cell")
@@ -44,6 +46,7 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
     public func tableViewSelectionDidChange(_ notification: Notification) {
         guard let tableView = notification.object as? NSTableView else { return }
         onSelectionChange?(tableView.selectedRowIndexes)
+        frozenView?.needsDisplay = true
     }
 
     public func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -58,6 +61,7 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
         guard let columnIndex = columns.firstIndex(where: { $0.displayName == tableColumn.identifier.rawValue }) else {
             return nil
         }
+
         let info = columns[columnIndex]
         let value = cellValue(row: row, columnIndex: columnIndex)
 

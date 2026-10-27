@@ -429,6 +429,104 @@ func run() throws {
     check("六种聚合都能执行", aggregateCount == PivotAggregate.allCases.count)
     check("六种聚合标题齐全", Set(PivotAggregate.allCases.map(\.title)).count == 6)
 
+    // R-PVT-04：多层表头。行维度纵向贯穿，列维度按前缀横向合并，多值再加一层值标题。
+    func headerCell(_ header: PivotHeader, level: Int, start: Int) -> PivotHeaderCell? {
+        header.cells.first { $0.level == level && $0.startColumn == start }
+    }
+    /// 每一层都得从第 0 列铺到最后一列，不重叠、不留缝。纵向贯穿的格子在各层都算数。
+    func headerCovers(_ header: PivotHeader, columns: Int) -> Bool {
+        for level in 0..<header.levelCount {
+            let cells = header.cells
+                .filter { $0.level <= level && level < $0.level + $0.levelSpan }
+                .sorted { $0.startColumn < $1.startColumn }
+            if cells.isEmpty { return false }
+            var cursor = 0
+            for cell in cells {
+                if cell.startColumn != cursor { return false }
+                cursor += cell.span
+            }
+            if cursor != columns { return false }
+        }
+        return true
+    }
+
+    let plainHeader = try query.session.pivotWithHeader(spec: PivotSpec(
+        rows: ["city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    check("单维度表头一层", plainHeader.header.levelCount == 1)
+    check("单维度冻结一列", plainHeader.header.rowDimensionCount == 1)
+    check("单维度表头两格", plainHeader.header.cells.count == 2)
+    check("行字段在左", headerCell(plainHeader.header, level: 0, start: 0)?.title == "city")
+    check("值标题在右", headerCell(plainHeader.header, level: 0, start: 1)?.title == "amount 求和")
+    check("单维度表头铺满", headerCovers(plainHeader.header, columns: plainHeader.columns.count))
+    check("表头路径结果不变", plainHeader.rowCount == pivotSum.rowCount && plainHeader.rows == pivotSum.rows)
+
+    let twoRowHeader = try query.session.pivotWithHeader(spec: PivotSpec(
+        rows: ["city", "name"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    check("两个行维度冻结两列", twoRowHeader.header.rowDimensionCount == 2)
+    check("两个行维度仍是一层", twoRowHeader.header.levelCount == 1)
+    check("行维度各占一格", headerCell(twoRowHeader.header, level: 0, start: 0)?.title == "city"
+        && headerCell(twoRowHeader.header, level: 0, start: 1)?.title == "name")
+    check("两个行维度表头铺满", headerCovers(twoRowHeader.header, columns: twoRowHeader.columns.count))
+
+    // 两级列维度 + 两个值：表头三层，值是第 0 层，城市第 1 层，姓名第 2 层。
+    let multiHeader = try query.session.pivotWithHeader(spec: PivotSpec(
+        rows: ["amount"],
+        columns: ["city", "name"],
+        values: [
+            PivotValue(column: "amount", aggregate: .sum),
+            PivotValue(column: "amount", aggregate: .average)
+        ]
+    ))
+    check("多值多列维度三层表头", multiHeader.header.levelCount == 3)
+    check("多值多列维度列数", multiHeader.columns.count == 13)
+    check("行维度贯穿全部层", headerCell(multiHeader.header, level: 0, start: 0)?.levelSpan == 3)
+    check("值标题横跨全部组合", headerCell(multiHeader.header, level: 0, start: 1)?.title == "amount 求和"
+        && headerCell(multiHeader.header, level: 0, start: 1)?.span == 6)
+    check("第二个值标题接在后面", headerCell(multiHeader.header, level: 0, start: 7)?.title == "amount 平均"
+        && headerCell(multiHeader.header, level: 0, start: 7)?.span == 6)
+    check("同城市合并", headerCell(multiHeader.header, level: 1, start: 1)?.title == "上海"
+        && headerCell(multiHeader.header, level: 1, start: 1)?.span == 4)
+    check("单行城市不合并", headerCell(multiHeader.header, level: 1, start: 5)?.title == "北京"
+        && headerCell(multiHeader.header, level: 1, start: 5)?.span == 1)
+    check("第二个值段重新开始合并", headerCell(multiHeader.header, level: 1, start: 7)?.span == 4)
+    check("第二层按组合顺序铺开", headerCell(multiHeader.header, level: 2, start: 1)?.title == "O'Brien"
+        && headerCell(multiHeader.header, level: 2, start: 2)?.title == "a"
+        && headerCell(multiHeader.header, level: 2, start: 6)?.title == "d")
+    check("多值多列维度表头铺满", headerCovers(multiHeader.header, columns: multiHeader.columns.count))
+
+    let singleValueCross = try query.session.pivotWithHeader(spec: PivotSpec(
+        rows: ["city"],
+        columns: ["name", "city"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    ))
+    check("单值不加值标题层", singleValueCross.header.levelCount == 2)
+    // 单个值不加值标题层，第 0 层直接是第一个列维度，行维度那一格纵向贯穿两层。
+    let singleLevel0 = singleValueCross.header.cells(atLevel: 0)
+    check("单值没有值标题格", !singleLevel0.contains { $0.title == "amount 求和" })
+    check("单值行维度贯穿两层", headerCell(singleValueCross.header, level: 0, start: 0)?.title == "city"
+        && headerCell(singleValueCross.header, level: 0, start: 0)?.levelSpan == 2)
+    check("单值第 0 层每个姓名一格", singleLevel0.count == singleValueCross.columns.count
+        && singleLevel0.allSatisfy { $0.span == 1 })
+    // 组合按 姓名、城市 排序，上海被北京隔断，第 1 层每格只能落一列，合并不跨过别的键。
+    check("单值第 1 层不跨键合并", singleValueCross.header.cells(atLevel: 1).allSatisfy { $0.span == 1 })
+    check("单值末层每列一格", singleValueCross.header.cells(atLevel: 1).count == singleValueCross.columns.count - 1)
+    check("单值交叉表铺满", headerCovers(singleValueCross.header, columns: singleValueCross.columns.count))
+
+    // 表头只影响呈现，不能改变结果。同一份配置走两条路径列名、行必须一致。
+    let crossSpec = PivotSpec(
+        rows: ["city"],
+        columns: ["name"],
+        values: [PivotValue(column: "amount", aggregate: .sum)]
+    )
+    let plainCross = try query.session.pivot(spec: crossSpec)
+    let headerCross = try query.session.pivotWithHeader(spec: crossSpec)
+    check("表头路径列名一致", plainCross.columns.map(\.name) == headerCross.columns.map(\.name))
+    check("表头路径行一致", plainCross.rows == headerCross.rows)
+
     // 聚合结果要跟手写 SQL 对得上，不只是"能跑"。
     // rows 里每个格子是 String?，取值要剥两层。
     func scalar(_ result: SQLResult) -> String? {

@@ -82,6 +82,8 @@ public struct DataGridView: NSViewRepresentable {
     public let columns: [ColumnInfo]
     public let rowCount: Int
     public let sorts: [SortSpec]
+    /// 多层表头。传 nil 时按每列一个标题画，和以前一样。
+    public let header: PivotHeader?
     public let provider: (Int, Int) throws -> TableBlock
     public let onSortClick: (String, Bool) -> Void
     public let onSelectionChange: (IndexSet) -> Void
@@ -92,6 +94,7 @@ public struct DataGridView: NSViewRepresentable {
         columns: [ColumnInfo],
         rowCount: Int,
         sorts: [SortSpec] = [],
+        header: PivotHeader? = nil,
         provider: @escaping (Int, Int) throws -> TableBlock,
         onSortClick: @escaping (String, Bool) -> Void = { _, _ in },
         onSelectionChange: @escaping (IndexSet) -> Void = { _ in },
@@ -101,6 +104,7 @@ public struct DataGridView: NSViewRepresentable {
         self.columns = columns
         self.rowCount = rowCount
         self.sorts = sorts
+        self.header = header
         self.provider = provider
         self.onSortClick = onSortClick
         self.onSelectionChange = onSelectionChange
@@ -137,6 +141,10 @@ public struct DataGridView: NSViewRepresentable {
         tableView.doubleAction = #selector(GridTableView.activateRow(_:))
         tableView.onRowActivate = onRowActivate
 
+        let headerView = GridHeaderView(frame: NSRect(x: 0, y: 0, width: 0, height: 24))
+        headerView.header = header
+        tableView.headerView = headerView
+
         let scrollView = NSScrollView()
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
@@ -144,8 +152,17 @@ public struct DataGridView: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
 
+        // 冻结列盖在滚动区左边，先加滚动区再加它，保证它在上面。
+        let frozen = FrozenColumnsView()
+        frozen.translatesAutoresizingMaskIntoConstraints = false
+        frozen.header = header
+        let frozenWidth = frozen.widthAnchor.constraint(equalToConstant: 0)
+        frozenWidth.isActive = true
+        frozen.widthConstraint = frozenWidth
+
         container.addSubview(rowNumbers)
         container.addSubview(scrollView)
+        container.addSubview(frozen)
         NSLayoutConstraint.activate([
             rowNumbers.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             rowNumbers.topAnchor.constraint(equalTo: container.topAnchor),
@@ -154,13 +171,20 @@ public struct DataGridView: NSViewRepresentable {
             scrollView.leadingAnchor.constraint(equalTo: rowNumbers.trailingAnchor),
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            frozen.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            frozen.topAnchor.constraint(equalTo: container.topAnchor),
+            frozen.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
 
         rowNumbers.attach(tableView: tableView, scrollView: scrollView)
+        frozen.attach(tableView: tableView, scrollView: scrollView)
         context.coordinator.contentTableView = tableView
         context.coordinator.rowNumbersView = rowNumbers
+        context.coordinator.frozenView = frozen
+        context.coordinator.scrollView = scrollView
         rebuildColumns(tableView)
+        applyHeaderLayout(tableView: tableView, scrollView: scrollView, frozen: frozen)
         return container
     }
 
@@ -182,11 +206,60 @@ public struct DataGridView: NSViewRepresentable {
         dataSource.rowCount = rowCount
         dataSource.sorts = sorts
 
-        if changed, let tableView = dataSource.contentTableView {
-            dataSource.resetFailedBlocks()
-            rebuildColumns(tableView)
+        if let tableView = dataSource.contentTableView {
+            if changed {
+                dataSource.resetFailedBlocks()
+                rebuildColumns(tableView)
+            }
+            applyHeaderLayout(
+                tableView: tableView,
+                scrollView: dataSource.scrollView,
+                frozen: dataSource.frozenView
+            )
         }
         dataSource.rowNumbersView?.needsDisplay = true
+    }
+
+    /// 把表头层数和冻结列数同步到视图上。层数变了要连表头高度和冻结区宽度一起改，
+    /// 否则多出来的那层表头会盖住首行，冻结区还停在上一份结果的位置。
+    private func applyHeaderLayout(
+        tableView: NSTableView,
+        scrollView: NSScrollView?,
+        frozen: FrozenColumnsView?
+    ) {
+        let levels = max(1, header?.levelCount ?? 1)
+        let height = GridHeaderView.height(forLevels: levels)
+        if let headerView = tableView.headerView as? GridHeaderView {
+            // 表的列重建后，表头里的层级要跟着换一份，否则画的是上一次的格子。
+            headerView.header = header
+            if abs(headerView.frame.height - height) > 0.5 {
+                resizeHeader(tableView: tableView, scrollView: scrollView, to: height)
+            }
+        }
+
+        guard let frozen else { return }
+        frozen.header = header
+        // 行维度列冻结。至少留一列不冻结，否则结果列宽为零时冻结区会和滚动区打架。
+        frozen.frozenColumnCount = min(header?.rowDimensionCount ?? 0, max(0, visibleColumns.count - 1))
+        frozen.widthConstraint?.constant = frozen.frozenWidth
+        frozen.needsDisplay = true
+    }
+
+    /// 改表头高度。AppKit 的自动上内边距不会跟着变，用户停在顶部时得自己把滚动位置补回去，
+    /// 否则多出来的那层表头正好压在首行上。
+    private func resizeHeader(tableView: NSTableView, scrollView: NSScrollView?, to height: CGFloat) {
+        guard let headerView = tableView.headerView, let scrollView else { return }
+        let clip = scrollView.contentView.bounds
+        let oldHeight = headerView.frame.height
+        let atTop = abs(clip.minY + oldHeight) < 2
+
+        headerView.frame.size.height = height
+        headerView.superview?.needsDisplay = true
+        scrollView.tile()
+        if atTop {
+            scrollView.contentView.scroll(to: NSPoint(x: clip.minX, y: -height))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
     }
 
     private func rebuildColumns(_ tableView: NSTableView) {
