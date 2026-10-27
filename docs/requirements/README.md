@@ -59,17 +59,17 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 |---|---|---|
 | 01-product-scope.md | 7 | 已定义 |
 | 02-data-import.md | 7 | 已实现，验收框待同步 |
-| 03-data-grid.md | 8 | 已实现，R-GRID-08 已完成 |
-| 04-sql-console.md | 5 | 已实现；R-SQL-02/04 已完成，R-SQL-01/03/05 剩个别验收项待同步 |
-| 05-pivot-table.md | 4 | 已实现；R-PVT-01/02/03/04 的勾选已同步，剩“多级表头逐级合并”未做 |
-| 06-column-inspector.md | 4 | 已实现，R-INSP-01/02/03/04 验收全部勾掉（深色对比度已离屏实测） |
+| 03-data-grid.md | 8 | 已实现；R-GRID-08 已完成，R-GRID-01/02/03/04/05 的验收框是场景实测，1000 万行排序和横向滚动还没逐条补测 |
+| 04-sql-console.md | 5 | 已实现；R-SQL-02/04/05 已完成，R-SQL-01 与 R-SQL-03 的剩余验收项是场景实测，代码路径已可用 |
+| 05-pivot-table.md | 4 | 已实现；R-PVT-01/02/03 已完成，R-PVT-04 剩“多级表头逐级合并”确实没做 |
+| 06-column-inspector.md | 4 | 已实现，R-INSP-01/02/03/04 已完成（深色对比度已离屏实测） |
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
 | 08-performance.md | 7 | 七条全部完成；滚动帧耗时、点击延迟、缓存转换、内存、包体积与冷启动都有实测与脚本；500MB 冷打开中位 1.546 秒，冷启动 152 次中位 0.497 秒（预算 0.6 秒，p95 0.537）；基准记录改由 scripts/bench-record.py 追加并比对退化 |
 | 09-app-shell.md | 7 | 已实现；R-SHELL-02 菜单与 11 条快捷键实测通过，R-SHELL-04 关文件回空状态已真机验证，其余验收框待同步 |
-| 10-packaging-release.md | 6 | dmg 15.8 MB 已出，README 第一屏三个数字齐；签名与公证缺账号 |
+| 10-packaging-release.md | 6 | R-REL-03 已完成；dmg 15.8 MB 已出，README 第一屏三个数字齐；签名与公证缺账号 |
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 20 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
-| 14-charts.md | 5 | 图表四类、一键分析已实现，R-VIZ-02/03/04/05 验收已勾；release 出图 0.07 秒；图表跟随当前文件，切文件与关文件都会清空 |
+| 14-charts.md | 5 | 图表四类、一键分析已实现，R-VIZ-01/02/03/04/05 全部完成；release 出图 0.07 秒；图表跟随当前文件，切文件与关文件都会清空 |
 
 共 101 条需求。
