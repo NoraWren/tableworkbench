@@ -11,6 +11,13 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public static var parquetViewCellThreshold = 20_000_000
     /// 文本列类型冲突检查的抽样门槛，非空行超过它就只扫前这么多行。测试里会调小来覆盖抽样分支。
     public static var textProbeSampleThreshold = 200_000
+    /// 平时的工作上限。导入期会临时抬高，物化完立刻收回这个值。
+    public static let residentMemoryLimit = "1200MB"
+    /// 导入期的工作上限。500 MB CSV 物化要 1.3 GB 出头的工作内存，卡在 1200MB 打开要 2.0 秒，
+    /// 抬到 1.4 GB 是 1.5 秒；再往上没有额外收益，峰值反而继续涨。
+    public static let importMemoryLimitBytes = 1_400_000_000
+    /// 文件小于这个尺寸时，物化用不到导入上限，保持原样。
+    public static let importMemoryLimitFileThreshold = 64 * 1024 * 1024
     private var view: QueryView = .empty
     private var hasResultTable = false
     private var computedColumns: [(name: String, expression: String)] = []
@@ -61,6 +68,19 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         case parquet(URL)
     }
 
+    /// 导入期的工作上限。只对 CSV 大文件放宽，Parquet 走视图、用不上。
+    ///
+    /// 500 MB CSV 物化 __base 要 1.3 GB 出头的工作内存。卡在 1200MB 时打开要 2.0 秒，
+    /// 抬到 1.4 GB 是 1.5 秒；再往上（2 GB、4 GB）没有额外收益，峰值 RSS 却跟着涨。
+    /// 中间那 0.4 秒具体花在哪还没验到底：duckdb_temporary_files() 全程 0 字节，
+    /// 所以不是肉眼可见的落盘，更像是被上限压住时并行度起不来。见 R-DEC-15。
+    private static func importMemoryLimit(for source: Source) -> String {
+        guard case .csv(let url, _) = source else { return residentMemoryLimit }
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
+        guard size >= importMemoryLimitFileThreshold else { return residentMemoryLimit }
+        return "\(importMemoryLimitBytes)B"
+    }
+
     private static func open(source: Source) throws -> DuckDBSession {
         do {
             let reportTiming = ProcessInfo.processInfo.environment["TW_OPEN_TIMING"] != nil
@@ -71,11 +91,13 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 FileHandle.standardError.write(Data(String(format: "[open] %@ %.3f 秒\n", label, elapsed).utf8))
             }
             let fileManager = FileManager.default
+            let importLimit = importMemoryLimit(for: source)
             let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent("tableworkbench-\(UUID().uuidString)", isDirectory: true)
             try fileManager.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
             let database = try Database(store: .inMemory)
             let connection = try database.connect()
-            try connection.execute("SET memory_limit='1200MB'")
+            // 导入期的工作上限比常驻上限高，见 importMemoryLimit 的注释。
+            try connection.execute("SET memory_limit='\(importLimit)'")
             try connection.execute("SET temp_directory='\(temporaryDirectory.path.replacingOccurrences(of: "'", with: "''"))'")
 
             let createTable: String
@@ -111,6 +133,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             }
             try connection.execute(createTable)
             mark("物化 __base")
+            // 物化完成就把工作上限收回常驻值，导入期多要的内存随即还给分配器。
+            try connection.execute("SET memory_limit='\(DuckDBSession.residentMemoryLimit)'")
 
             let described = try connection.query("DESCRIBE SELECT * FROM \"__base\"")
             mark("DESCRIBE")
