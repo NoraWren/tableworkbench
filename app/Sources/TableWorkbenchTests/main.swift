@@ -1701,6 +1701,30 @@ func run() throws {
     check("结果列名带聚合方式", wiredResult.columns.last?.displayName.contains("求和") == true)
     check("结果带上耗时", wiredResult.elapsed >= 0)
 
+    // 不用拖拽，按区域点菜单也能把字段放进去，两条路要落到同一份草稿上。
+    let clicked = PivotDraft()
+    check("点菜单加字段前不能生成", !clicked.canRun)
+    for area in PivotDraft.Area.allCases {
+        check("四个投放区都能点选，\(area.rawValue) 区存在", PivotDraft.Area.allCases.contains(area))
+    }
+    clicked.add("city", to: .rows)
+    clicked.add("amount", to: .values)
+    check("点选路径同样能生成", clicked.canRun)
+    check("点选路径的 spec 与拖拽一致", clicked.spec.rows == wired.spec.rows)
+    let clickedResult = try query.session.pivot(spec: clicked.spec)
+    check("点选路径查询行数一致", clickedResult.rowCount == wiredResult.rowCount)
+    clicked.add("city", to: .columns)
+    check("点选也能加列维度", clicked.spec.columns == ["city"])
+    let clickedCross = try query.session.pivotWithHeader(spec: PivotSpec(
+        rows: ["city"],
+        columns: [],
+        values: [PivotValue(column: "amount", aggregate: .sum), PivotValue(column: "amount", aggregate: .average)]
+    ))
+    // 没有列维度时表头就是一行：行维度一列，两个值各一列。
+    check("点选出的多值透视是单行表头", clickedCross.header.levelCount == 1)
+    check("单行表头覆盖行维度加两个值", clickedCross.header.cells.count == 3)
+    check("行维度只占左边一列", clickedCross.header.rowDimensionCount == 1)
+
     // SQL 结果的截断与空结果提示（R-SQL 2.3）。
     let normalStatus = SQLResultStatus(
         result: SQLResult(columns: [], rows: [], rowCount: 12, elapsed: 0.031, truncated: false),

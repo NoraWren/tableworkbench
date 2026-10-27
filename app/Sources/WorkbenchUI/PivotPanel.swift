@@ -87,7 +87,7 @@ public struct PivotPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("透视表")
                 .font(.headline)
-            Text("把字段拖到行、列、值区域，可以再放一个到筛选")
+            Text("把字段拖到行、列、值区域，也可以点下面的菜单逐个加")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -105,6 +105,25 @@ public struct PivotPanel: View {
                     }
                 }
             }
+
+            // 拖拽在触控板和小屏上不好使，也给一条纯点击的路径，顺带让辅助功能能用。
+            Menu {
+                ForEach(PivotDraft.Area.allCases, id: \.self) { area in
+                    Menu(area.rawValue) {
+                        ForEach(columns, id: \.name) { column in
+                            Button(column.displayName) {
+                                state.add(column.name, to: area)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label("点这里加字段", systemImage: "plus.circle")
+                    .font(.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("不用拖拽，按区域选字段")
 
             dropArea("行", area: .rows, items: state.rows) { field in
                 state.remove(field, from: .rows)
