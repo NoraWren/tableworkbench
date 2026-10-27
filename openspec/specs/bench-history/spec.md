@@ -75,3 +75,14 @@
 #### Scenario: 预演
 - **WHEN** 执行 `./scripts/bench-record.py --dry-run`
 - **THEN** 终端打印待追加行，`docs/bench-history.md` 保持不变
+
+### Requirement: 同一份测量不重复记两次
+
+待追加的四项与表尾同机型行完全相同时，脚本 MUST NOT 追加，MUST 说明这是重复记录，
+并以 0 退出。确认要再记一行时 MUST 能用 `--force` 跳过这道拦截。
+
+`--from-logs` 复用同一份测量文件，连跑两次必然触发这条；它防的是重复，不是防新数据。
+
+#### Scenario: 连跑两次 --from-logs
+- **WHEN** 同一个测量文件连续追加两次
+- **THEN** 表里只多出一行，第二次终端提示「没有追加」并返回 0

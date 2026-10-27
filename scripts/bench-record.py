@@ -343,6 +343,8 @@ def main():
     parser.add_argument("--from-logs", action="store_true",
                         help=f"不重跑，复用 {RESULT_FILE}（没有就退回 bench.sh 的单轮日志）")
     parser.add_argument("--dry-run", action="store_true", help="只打印，不写文件")
+    parser.add_argument("--force", action="store_true",
+                        help="上一行数字完全相同也照样追加（默认视为重复记录，不写）")
     parser.add_argument("--history", default=str(HISTORY),
                         help="记录文件路径（默认 docs/bench-history.md）")
     args = parser.parse_args()
@@ -379,8 +381,11 @@ def main():
     baseline_cells = None
     baseline_note = ""
     skipped = []
+    last_cells = None
     for index in reversed(data_rows):
         cells = split_cells(old_lines[index])
+        if last_cells is None and len(cells) >= 7 and cells[2] == machine:
+            last_cells = cells
         if len(cells) < 7 or cells[2] != machine:
             continue
         # 缓存命中和冷打开差着数量级，只能同口径比。
@@ -391,6 +396,17 @@ def main():
             continue
         baseline_cells, baseline_note = cells, f"{cells[0]} / {cells[1]}"
         break
+
+    # --from-logs 连跑两次会追加两行一模一样的数，那是重复记录，不是两次测量。
+    if last_cells is not None and not args.force:
+        same = all(row_cells[3 + offset].replace("（冷打开）", "").strip()
+                   == last_cells[3 + offset].replace("（冷打开）", "").strip()
+                   for offset in range(len(METRICS)))
+        if same:
+            print()
+            print(f"没有追加：四项数字与表尾 {last_cells[0]} / {last_cells[1]} 完全相同。")
+            print("这多半是把同一份测量又记了一次。真要再记一行，加 --force。")
+            return 0
 
     print()
     print(f"机型：{machine}")
