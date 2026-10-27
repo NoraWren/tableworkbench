@@ -1,8 +1,8 @@
 # 本地表格工作台（暂名）
 
-TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx files in about two seconds. Built with SwiftUI and DuckDB; your data never leaves the machine.
+TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx files in under two seconds. Built with SwiftUI and DuckDB; your data never leaves the machine.
 
-拖进一个 500MB 的 CSV，两秒左右打开，三百多万行也能滚动，数据不出本机。
+拖进一个 500MB 的 CSV，一点几秒打开，三百多万行也能滚动，数据不出本机。
 
 ![500MB 的 CSV，三百多万行，滚得动，点一下就把能看的图挑出来](docs/media/demo.gif)
 
@@ -10,7 +10,7 @@ TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx file
 
 | 指标 | 实测 |
 |---|---|
-| 打开速度：500MB CSV 首次打开（无缓存） | 2.1–2.4 秒 |
+| 打开速度：500MB CSV 首次打开（无缓存） | 1.5–1.9 秒（八次中位 1.55 秒） |
 | 包体积：dmg / 解压后的 app | 15 MB / 53 MB |
 | 冷启动：双击到窗口出现 | 0.55–0.63 秒 |
 
