@@ -11,6 +11,7 @@ struct BenchResult: Encodable {
     let resultRows: Int
     let firstCell: String?
     let openSeconds: Double
+    let usedCache: Bool
     let querySeconds: Double?
     let blocks: [BlockTiming]
 }
@@ -41,9 +42,17 @@ var pivotBench = false
 var statsColumn: String?
 var printValues = false
 var exportPaths: [ExportFormat: String] = [:]
+var cacheDirectory: String?
 var argumentIndex = 2
 while argumentIndex < arguments.count {
     switch arguments[argumentIndex] {
+    case "--cache-dir":
+        if argumentIndex + 1 < arguments.count {
+            cacheDirectory = arguments[argumentIndex + 1]
+            argumentIndex += 2
+        } else {
+            argumentIndex += 1
+        }
     case "--sort":
         if argumentIndex + 1 < arguments.count {
             sortColumn = arguments[argumentIndex + 1]
@@ -107,6 +116,15 @@ while argumentIndex < arguments.count {
 do {
     let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
     let bytes = (attributes[.size] as? NSNumber)?.intValue ?? 0
+
+    // 量冷打开时把缓存指到一个空目录，保证这一轮真的走全量解析。
+    if let cacheDirectory {
+        try? FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: cacheDirectory),
+            withIntermediateDirectories: true
+        )
+        ParquetCache.shared = ParquetCache(baseDirectory: URL(fileURLWithPath: cacheDirectory))
+    }
 
     let start = Date()
     let opened = try FileImporter.open(url: url)
@@ -207,6 +225,7 @@ do {
         resultRows: opened.session.resultCount,
         firstCell: firstCell,
         openSeconds: openSeconds,
+        usedCache: opened.usedCache,
         querySeconds: querySeconds,
         blocks: timings
     )
@@ -220,6 +239,7 @@ do {
         print("编码: \(result.encoding)  列: \(result.columns)  行: \(result.rows)  结果: \(result.resultRows)")
         print("首行: \(result.firstCell ?? "nil")")
         print(String(format: "打开: %.3f 秒", result.openSeconds))
+        print("命中 Parquet 缓存: \(result.usedCache ? "是" : "否")")
         if let querySeconds = result.querySeconds {
             print(String(format: "查询准备: %.3f 秒", querySeconds))
         }
