@@ -17,20 +17,6 @@
 - 边界：不做"打开文件夹批量导入"。多选只处理选中文件，不递归子目录。
 - 依赖：R-IMP-05、R-PERF-01
 
-### R-IMP-01a 拖放接收层
-
-- 优先级：P0
-- 状态：已实现（2026-10-27），真机鼠标拖拽待人工确认
-- 为什么单独记一条：入口 1 长期不通，2026-10-26 录 GIF 时发现访达拖拽触发不了，修法改了架构位置，值得留档。
-- 根因：SwiftUI 的 `.dropDestination(for: URL.self)` 挂在 `NavigationSplitView` 上时，生成的拖放目标视图是分栏视图的**兄弟节点**。AppKit 投递拖放先 `hitTest` 找最深的视图，再沿父链往上找 `registeredDraggedTypes` 匹配的那个；兄弟链不在父链上，拖拽落不到它身上。
-- 修法：窗口内容视图换成自绘的 `FileDropContainerView`（`DropTarget.swift`），注册 `public.file-url`，原 SwiftUI 视图整个装在里面。这样任意位置的父链都能走回接收器，`NSTableView` 也抢不走。
-- 安装时机：必须延一轮主队列。在 `viewDidMoveToWindow` 里当场换 contentView，SwiftUI 随后会把 `NSHostingView` 重新挂回 `NSThemeFrame`，容器变空壳（离屏探针复现过）。
-- 只接本地文件：剪贴板用 `urlReadingFileURLsOnly` 读，纯文字、网页图片一律返回不接收，不弹提示。
-- 悬停高亮：拖入时给容器 layer 描 3pt 强调色边框，松手或移出撤掉，不进布局。
-- 验证：`TableWorkbenchTests` 造真 `NSWindow`，断言 contentView 是容器、注册了 `.fileURL`、铺满内容区、只一层、重复安装不叠层；再用假 `NSDraggingInfo` 按 AppKit 顺序走完 `draggingEntered` → `draggingUpdated` → `prepareForDragOperation` → `performDragOperation`，断言 URL 交到处理函数；换成纯文字断言全部拒绝。`TW_DROP_PROBE=1 TableWorkbenchUIAudit` 打印注册视图与覆盖面积（1200×828 = 100%）。
-- 证据：悬停高亮态离屏截图 [drop-window-highlight.png](../media/verification/drop-window-highlight.png)（真实视图树，模拟文件悬停，边框 3pt）。工具栏窗口换 contentView 前后内容区都是 900×628，toolbar 没丢。
-- 没证明的：系统真把访达的拖拽会话送进来这一步，测试进程造不出 X 事件，只能真机鼠标拖一次。
-
 ## R-IMP-02 格式矩阵
 
 - 优先级：P0
@@ -140,3 +126,17 @@
   - [ ] 导入失败的条目不出现在左栏的历史列表里
 - 边界：不做自动修复脏文件。
 - 依赖：R-IMP-02
+
+## R-IMP-08 拖放接收层
+
+- 优先级：P0
+- 状态：已实现（2026-10-27），真机鼠标拖拽待人工确认
+- 为什么单独记一条：入口 1 长期不通，2026-10-26 录 GIF 时发现访达拖拽触发不了，修法改了架构位置，值得留档。
+- 根因：SwiftUI 的 `.dropDestination(for: URL.self)` 挂在 `NavigationSplitView` 上时，生成的拖放目标视图是分栏视图的**兄弟节点**。AppKit 投递拖放先 `hitTest` 找最深的视图，再沿父链往上找 `registeredDraggedTypes` 匹配的那个；兄弟链不在父链上，拖拽落不到它身上。
+- 修法：窗口内容视图换成自绘的 `FileDropContainerView`（`DropTarget.swift`），注册 `public.file-url`，原 SwiftUI 视图整个装在里面。这样任意位置的父链都能走回接收器，`NSTableView` 也抢不走。
+- 安装时机：必须延一轮主队列。在 `viewDidMoveToWindow` 里当场换 contentView，SwiftUI 随后会把 `NSHostingView` 重新挂回 `NSThemeFrame`，容器变空壳（离屏探针复现过）。
+- 只接本地文件：剪贴板用 `urlReadingFileURLsOnly` 读，纯文字、网页图片一律返回不接收，不弹提示。
+- 悬停高亮：拖入时给容器 layer 描 3pt 强调色边框，松手或移出撤掉，不进布局。
+- 验证：`TableWorkbenchTests` 造真 `NSWindow`，断言 contentView 是容器、注册了 `.fileURL`、铺满内容区、只一层、重复安装不叠层；再用假 `NSDraggingInfo` 按 AppKit 顺序走完 `draggingEntered` → `draggingUpdated` → `prepareForDragOperation` → `performDragOperation`，断言 URL 交到处理函数；换成纯文字断言全部拒绝。`TW_DROP_PROBE=1 TableWorkbenchUIAudit` 打印注册视图与覆盖面积（1200×828 = 100%）。
+- 证据：悬停高亮态离屏截图 [drop-window-highlight.png](../media/verification/drop-window-highlight.png)（真实视图树，模拟文件悬停，边框 3pt）。工具栏窗口换 contentView 前后内容区都是 900×628，toolbar 没丢。
+- 没证明的：系统真把访达的拖拽会话送进来这一步，测试进程造不出 X 事件，只能真机鼠标拖一次。
