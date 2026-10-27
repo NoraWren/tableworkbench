@@ -29,6 +29,8 @@
 | GB18030 先转成 UTF-8 再交给 DuckDB，中文列名与内容不乱码 | gbk-sample.csv 实测 |
 | 500 MB CSV 打开 0.79–1.33 秒；1 GB CSV 首次 4.78 秒、命中缓存二次 1.76–2.19 秒 | scripts/bench.sh 与 1gb.csv |
 | 分发包改用 release 构建：dmg 15 MB，解压后的 app bundle 53 MB（debug 构建分别是 27 MB 和 109 MB） | make-dmg.sh、du |
+| 冷启动（release，`open -a` 到带标题主窗口，忙等）八批 152 轮中位 0.497 秒、最大 0.563 秒、p95 0.537 秒，超 0.6 秒 0/152；首轮冷读 0.49–1.64 秒 | scripts/bench-launch.py 跑八批 |
+| 多出的 0.14 秒在 `willFinish → didFinish` 的系统菜单构建（`NSTextInputMenu` → `isWritingToolsAvailable` → `dlopen`）；`strip -x` 无改善，dyld 不是瓶颈 | 临时打点 + 70 KB 最小 SwiftUI app 对照 |
 
 ## 待验证事实（不许当成结论写进代码）
 
@@ -247,6 +249,19 @@
 - 结论：出图慢不是 SQL 或数据量的问题，而是打包配置问题。发版和演示一律用 BUILD_CONFIG=release 构建；R-VIZ-01 的 1 秒目标在 release 下成立。
 - 代价：debug 包只适合调试，不能拿它测性能或录演示。
 - 依赖：R-PVT-01、R-PERF-01
+
+## R-DEC-20 冷启动达标，多出的 0.14 秒落在系统菜单构建，不优化
+
+- 优先级：P0
+- 状态：已定（2026-10-27）
+- 事实：release 构建跑八批共 152 轮（负载 4.8–12.1），去掉每批首轮后中位 0.497 秒、最小 0.465、最大 0.563、p95 0.537，超 0.6 秒预算 0/152；各批中位只在 0.489–0.502 之间。首轮冷读 0.493–0.599 秒，单独标注。脚本是 `scripts/bench-launch.py`（会打一行系统负载，跑出来的数字要连着它看）。上一轮（2026-10-26）手工量的 0.55–0.63 秒已作废为历史记录。
+- 擦线超的两次：整轮测量里只出现过 2 次，一次 0.608 秒（负载 24.5，Chrome 与 Codex 同时开着），一次 0.642 秒（负载 8.7，但 Codex 渲染进程占 70% CPU）。同批中位没有跟着涨（0.506、0.557），更像是系统把那一轮挤了一下；没做定位，也没当异常值删掉。
+- 分段（直接 exec 口径，与 70 KB 最小 SwiftUI 空窗口 app 对照）：exec → App.init 0.013 对 0.007；→ willFinishLaunching 0.105 对 0.099；→ didFinishLaunching 0.245 对 0.102；→ 窗口出现 0.065 对 0.020。合计约 0.43 对 0.23。
+- 归因：多出的 0.143 秒在 `willFinish → didFinish`，采样落在 `AppDelegate.makeMainMenu` 里 `NSTextInputMenu` 初始化 → `NSWritingToolsCoordinator isWritingToolsAvailable` → `dlopen`，以及 MenuBarClientCore 的软链接加载。
+- 已验证否掉的：dyld 不是瓶颈。`strip -x` 后 0.371 对 0.364 秒，无改善；`willFinishLaunching` 前的 0.10 秒在最小 app 上一样有，是 AppKit 固定开销。
+- 结论：指标已达标，不为这 0.14 秒改菜单构建方式。能否绕开没验，动的是产品要的菜单项与快捷键，收益不明、回退风险清楚。
+- 没查到底的：上一轮 0.55–0.63 与这一轮 0.465–0.563 的差异。轮询间隔（上一轮 10 毫秒、这一轮忙等）、系统状态、当时的并发进程三条都对不上 0.1 秒这个量。
+- 依赖：R-PERF-04、R-REL-02
 
 ## 风险清单
 

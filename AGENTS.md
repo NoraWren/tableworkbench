@@ -158,7 +158,8 @@ AIClient                协议适配、上下文构造、流式解析（旁路�
 │   └── Tests/DuckDBKitTests/
 └── scripts/
     ├── make-bench-data.sh       # 生成基准数据集
-    └── bench.sh                 # 跑性能基准并输出报告
+    ├── bench.sh                 # 跑性能基准并输出报告
+    └── bench-launch.py          # 冷启动计时，脚本自己拉起和退出应用
 ```
 
 `TableWorkbench` 是模块名占位，产品名待定，见 R-DEC-06。
@@ -211,6 +212,9 @@ xcodebuild -scheme TableWorkbench -configuration Debug build
 
 # 性能基准（M1 之后必须有）
 ./scripts/make-bench-data.sh && ./scripts/bench.sh
+
+# 冷启动（先装 release 包，脚本自己拉起和退出应用；开头会打系统负载）
+BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py --rounds 20
 ```
 
 一个需求算完成，要同时满足四条：
