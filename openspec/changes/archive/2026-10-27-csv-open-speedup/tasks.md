@@ -26,8 +26,8 @@
 
 ## 4. 文档
 
-- [ ] 4.1 08-performance.md 勾掉 R-PERF-01 第一条，状态改「已完成」，写新实测
-- [ ] 4.2 12-decisions-risks.md 把 R-DEC-15 改写成两级上限，R-DEC-16 标注被推翻
-- [ ] 4.3 bench-history.md 补「CSV 冷打开（2026-10-27）」一节
-- [ ] 4.4 README 第一屏「首次打开」换成新数字
-- [ ] 4.5 openspec validate --all --strict 通过
+- [x] 4.1 08-performance.md 勾掉 R-PERF-01 第一条，状态改「已完成」，写新实测
+- [x] 4.2 12-decisions-risks.md 把 R-DEC-15 改写成两级上限，R-DEC-16 标注被推翻
+- [x] 4.3 bench-history.md 补「CSV 冷打开（2026-10-27）」一节
+- [x] 4.4 README 第一屏「首次打开」换成新数字
+- [x] 4.5 openspec validate --all --strict 通过
