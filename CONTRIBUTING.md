@@ -37,6 +37,12 @@ swift run TableWorkbenchTests
 3. 新增依赖先在 `docs/third-party.md` 登记：名称、版本、许可证、用途、不引入会怎样。只收 MIT、Apache-2.0、BSD。
 4. 行为变化同步到 `docs/requirements/` 对应条目，勾选只在整条需求验完后进行。
 
+## 遇到 git 报非法 ref
+
+如果 `git fetch` 或 `git status` 报 `bad object refs/heads/master 2` 这类错误，是同步盘或备份工具
+把 `.git` 里的文件复制成了「文件名 + 空格 + 数字」。先跑 `./scripts/check-git-refs.sh --move`，
+它把副本搬到 `/tmp` 下的备份目录，之后 git 就正常了。
+
 ## 代码结构
 
 | 目录 | 负责 |
