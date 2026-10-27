@@ -21,6 +21,8 @@ public final class ParquetCache: @unchecked Sendable {
         }
         self.limitBytes = limitBytes
         try? FileManager.default.createDirectory(at: self.baseDirectory, withIntermediateDirectories: true)
+        // 上次进程被强杀留下的临时文件不会被任何转换认领，开机时清一次。
+        sweepStaleTemporaries()
     }
 
     public func cachedURL(for source: URL, variant: String) -> URL? {
@@ -83,6 +85,11 @@ public final class ParquetCache: @unchecked Sendable {
 
         let temporaryURL = baseDirectory.appendingPathComponent("\(key).parquet.tmp")
         try? FileManager.default.removeItem(at: temporaryURL)
+        // 转换中途抛错时自己收拾，不等下一次转换顺手删：用户可能再也不打开这个文件。
+        var succeeded = false
+        defer {
+            if !succeeded { try? FileManager.default.removeItem(at: temporaryURL) }
+        }
 
         let database = try Database(store: .inMemory)
         let connection = try database.connect()
@@ -102,6 +109,7 @@ public final class ParquetCache: @unchecked Sendable {
         """
         try connection.execute(sql)
         try FileManager.default.moveItem(at: temporaryURL, to: finalURL)
+        succeeded = true
         try? FileManager.default.setAttributes([.modificationDate: Foundation.Date()], ofItemAtPath: finalURL.path)
         evictIfNeeded(keeping: finalURL)
     }
@@ -116,7 +124,7 @@ public final class ParquetCache: @unchecked Sendable {
     public func clearAll() {
         let fileManager = FileManager.default
         guard let files = try? fileManager.contentsOfDirectory(at: baseDirectory, includingPropertiesForKeys: nil) else { return }
-        for file in files where file.pathExtension == "parquet" || file.pathExtension == "tmp" {
+        for file in files where isCacheFile(file) {
             try? fileManager.removeItem(at: file)
         }
     }
@@ -129,9 +137,32 @@ public final class ParquetCache: @unchecked Sendable {
             options: [.skipsHiddenFiles]
         ) else { return 0 }
         return files.reduce(Int64(0)) { total, file in
-            guard file.pathExtension == "parquet" else { return total }
+            // 半截的 .parquet.tmp 也占着磁盘，漏算它们，10 GB 上限就是假的。
+            guard isCacheFile(file) else { return total }
             let values = try? file.resourceValues(forKeys: [.fileSizeKey])
             return total + Int64(values?.fileSize ?? 0)
+        }
+    }
+
+    /// 缓存目录里算作占用的文件：正式产物与转换中的临时文件。
+    private func isCacheFile(_ url: URL) -> Bool {
+        url.pathExtension == "parquet" || url.lastPathComponent.hasSuffix(".parquet.tmp")
+    }
+
+    /// 清扫上次进程被强杀留下的临时文件。阈值取 1 小时：正常转换只要几秒，
+    /// 留出三个数量级的余量，不会误删别的进程正在写的文件。
+    public func sweepStaleTemporaries(olderThan seconds: TimeInterval = 3600) {
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: baseDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Foundation.Date().addingTimeInterval(-seconds)
+        for file in files where file.lastPathComponent.hasSuffix(".parquet.tmp") {
+            let values = try? file.resourceValues(forKeys: [.contentModificationDateKey])
+            guard let modified = values?.contentModificationDate, modified < cutoff else { continue }
+            try? fileManager.removeItem(at: file)
         }
     }
 
@@ -144,9 +175,15 @@ public final class ParquetCache: @unchecked Sendable {
         ) else { return }
 
         let entries: [(url: URL, size: Int64, date: Foundation.Date)] = files.compactMap { url in
-            guard url.pathExtension == "parquet" else { return nil }
+            guard isCacheFile(url) else { return nil }
             let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-            return (url, Int64(values?.fileSize ?? 0), values?.contentModificationDate ?? .distantPast)
+            let modified = values?.contentModificationDate ?? .distantPast
+            // 正在写的临时文件不能被淘汰，否则会把手上的转换打断。只认过期的那些。
+            if url.lastPathComponent.hasSuffix(".parquet.tmp"),
+               modified > Foundation.Date().addingTimeInterval(-3600) {
+                return nil
+            }
+            return (url, Int64(values?.fileSize ?? 0), modified)
         }
 
         var total = entries.reduce(Int64(0)) { $0 + $1.size }

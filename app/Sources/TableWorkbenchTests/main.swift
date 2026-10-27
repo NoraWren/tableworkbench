@@ -946,6 +946,47 @@ func run() throws {
     limitCache.setLimitBytes(10)
     check("设置上限立即淘汰", limitCache.totalSizeBytes() == 0)
 
+    // 中断残留：上次进程被杀留下的 .parquet.tmp 不能永久堆积。
+    let leftoverDirectory = working.appendingPathComponent("leftover-cache")
+    let leftoverCache = ParquetCache(baseDirectory: leftoverDirectory)
+    let staleTmp = leftoverDirectory.appendingPathComponent("stale.parquet.tmp")
+    let freshTmp = leftoverDirectory.appendingPathComponent("fresh.parquet.tmp")
+    try Data(repeating: 1, count: 400).write(to: staleTmp)
+    try Data(repeating: 1, count: 300).write(to: freshTmp)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-7200)],
+        ofItemAtPath: staleTmp.path
+    )
+    check("临时文件计入占用 700", leftoverCache.totalSizeBytes() == 700)
+    leftoverCache.sweepStaleTemporaries()
+    check("过期残留被清扫", !FileManager.default.fileExists(atPath: staleTmp.path))
+    check("新鲜的临时文件保留", FileManager.default.fileExists(atPath: freshTmp.path))
+    check("清扫后占用 300", leftoverCache.totalSizeBytes() == 300)
+    leftoverCache.clearAll()
+    check("清空也带走临时文件", leftoverCache.totalSizeBytes() == 0)
+
+    // 转换失败自己收拾：读一个不存在的文件，不能留下 .tmp。
+    let failureDirectory = working.appendingPathComponent("failure-cache")
+    let failureCache = ParquetCache(baseDirectory: failureDirectory)
+    let missing = working.appendingPathComponent("not-here.csv")
+    ParquetCache.shared = failureCache
+    failureCache.scheduleConversion(
+        sourceKey: missing,
+        readableURL: missing,
+        format: CSVFormat(delimiter: ",", hasHeader: true),
+        variant: "failure-test"
+    )
+    var leftoverAfterFailure: [String] = []
+    for _ in 0..<60 {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: failureDirectory.path)) ?? []
+        leftoverAfterFailure = names.filter { $0.hasSuffix(".parquet.tmp") }
+        if leftoverAfterFailure.isEmpty, names.isEmpty { break }
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    Thread.sleep(forTimeInterval: 0.5)
+    let failureNames = (try? FileManager.default.contentsOfDirectory(atPath: failureDirectory.path)) ?? []
+    check("转换失败不留临时文件", failureNames.filter { $0.hasSuffix(".parquet.tmp") }.isEmpty)
+
     // 隐私页的“清除缓存”：只删 parquet，目录里其他文件不能跟着没。
     let clearDirectory = working.appendingPathComponent("clear-cache")
     let clearCache = ParquetCache(baseDirectory: clearDirectory)
