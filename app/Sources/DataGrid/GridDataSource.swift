@@ -64,10 +64,12 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
 
         let info = columns[columnIndex]
         let value = cellValue(row: row, columnIndex: columnIndex)
+        // 复制和导出走原始值，界面上才收一次双精度的尾巴。
+        let shown = value.map { CellText.display($0, kind: info.kind) }
 
         let cell = reusableCell(in: tableView)
         cell.configure(
-            text: value ?? "NULL",
+            text: shown ?? "NULL",
             alignment: info.kind.isNumeric ? .right : .left,
             color: value == nil ? .tertiaryLabelColor : .labelColor
         )

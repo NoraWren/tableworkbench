@@ -249,6 +249,28 @@ MainActor.assumeIsolated {
                 header: PivotHeader.singleRow(titles: columns.map(\.displayName))
             ) {}
         }
+        // 查询结果的数值列：类型从 DESCRIBE 带回来之后要右对齐，双精度求和的尾巴要收掉。
+        let amountColumns = [
+            ColumnInfo(name: "大区", displayName: "大区", typeName: "VARCHAR", kind: .text),
+            ColumnInfo(name: "线上", displayName: "线上", typeName: "DOUBLE", kind: .double),
+            ColumnInfo(name: "经销", displayName: "经销", typeName: "DOUBLE", kind: .double)
+        ]
+        try render("sql-result-double", size: NSSize(width: 620, height: 220)) {
+            SQLResultView(
+                result: SQLResult(
+                    columns: amountColumns,
+                    rows: [
+                        ["华东", "1418753.5000000002", "1390881.1700000004"],
+                        ["华北", "1347134.6399999987", "1326420.3500000006"],
+                        ["华南", "1311186.0099999995", "1325054.8499999994"]
+                    ],
+                    rowCount: 3,
+                    elapsed: 0.004,
+                    truncated: false
+                ),
+                title: "透视结果"
+            ) {}
+        }
         try render("settings", size: NSSize(width: 520, height: 320)) {
             SettingsView()
         }

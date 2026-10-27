@@ -1724,6 +1724,17 @@ func run() throws {
     check("点选出的多值透视是单行表头", clickedCross.header.levelCount == 1)
     check("单行表头覆盖行维度加两个值", clickedCross.header.cells.count == 3)
     check("行维度只占左边一列", clickedCross.header.rowDimensionCount == 1)
+    // 取数统一转成 VARCHAR，但列类型要从 DESCRIBE 带回来，否则金额被当文本左对齐。
+    check("透视结果的金额列是数值类型", clickedCross.columns.last?.kind == .double)
+    check("透视结果的行维度是文本", clickedCross.columns.first?.kind == .text)
+    // 双精度求和会带 5000000002 这样的尾巴，显示层要收掉，但别碰真有的精度。
+    check("双精度尾巴收掉", CellText.shortenDouble("1418753.5000000002") == "1418753.5")
+    check("整数值不加小数点", CellText.shortenDouble("42") == "42")
+    check("负数尾巴也收", CellText.shortenDouble("-0.30000000000000004") == "-0.3")
+    check("真有的小数不动", CellText.shortenDouble("1.234567") == "1.234567")
+    check("文本列原样返回", CellText.display("1418753.5000000002", kind: .text) == "1418753.5000000002")
+    check("数值列走收尾", CellText.display("1418753.5000000002", kind: .double) == "1418753.5")
+    check("指数写法不碰", CellText.shortenDouble("1.5e+20") == "1.5e+20")
 
     // SQL 结果的截断与空结果提示（R-SQL 2.3）。
     let normalStatus = SQLResultStatus(

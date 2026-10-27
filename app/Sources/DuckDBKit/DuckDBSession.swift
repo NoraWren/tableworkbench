@@ -901,11 +901,14 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     ) throws -> SQLResult {
         let maxRows = 100_000
         var columnNames: [String] = []
+        var columnTypes: [String] = []
         if applyLimit {
             let described = try connection.query("DESCRIBE \(statement)")
             let nameColumn = described.column(at: 0).cast(to: String.self)
+            let typeColumn = described.column(at: 1).cast(to: String.self)
             for index in 0..<Int(described.rowCount) {
                 columnNames.append(nameColumn[DBInt(index)] ?? "column_\(index + 1)")
+                columnTypes.append(typeColumn[DBInt(index)] ?? "VARCHAR")
             }
         }
 
@@ -924,7 +927,15 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         columns.reserveCapacity(columnCount)
         for index in 0..<columnCount {
             let name = result.columnName(at: DBInt(index))
-            columns.append(ColumnInfo(name: name, displayName: name, typeName: "VARCHAR", kind: .text))
+            // 取数时统一转成 VARCHAR，但类型要按 DESCRIBE 的原文留着：
+            // 界面靠它决定右对齐、要不要收掉双精度的尾巴，索引到类型就全退化成文本了。
+            let typeName = index < columnTypes.count ? columnTypes[index] : "VARCHAR"
+            columns.append(ColumnInfo(
+                name: name,
+                displayName: name,
+                typeName: typeName,
+                kind: ColumnKind.infer(fromTypeName: typeName)
+            ))
         }
 
         let total = Int(result.rowCount)

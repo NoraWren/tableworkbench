@@ -184,7 +184,9 @@ public final class FrozenColumnsView: NSView {
         guard let columnIndex = dataSource.columns.firstIndex(where: { $0.displayName == identifier }) else {
             return nil
         }
-        return dataSource.cellValue(row: row, columnIndex: columnIndex) ?? "NULL"
+        let kind = dataSource.columns[columnIndex].kind
+        return dataSource.cellValue(row: row, columnIndex: columnIndex)
+            .map { CellText.display($0, kind: kind) } ?? "NULL"
     }
 
     // MARK: - 交互
