@@ -191,7 +191,7 @@ def measure(runs):
     }
 
 
-def read_measurements(from_logs):
+def read_measurements(from_logs, runs):
     """有 --from-logs 就复用上一次的测量文件，否则真跑一轮。"""
     if from_logs:
         if RESULT_FILE.exists():
@@ -229,7 +229,7 @@ def read_measurements(from_logs):
             "details": [],
         }
 
-    payload = measure(3)
+    payload = measure(runs)
     payload["measuredAt"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     RESULT_FILE.write_text(json.dumps(payload, indent=2))
     return payload
@@ -360,6 +360,7 @@ def main():
     parser.add_argument("--from-logs", action="store_true",
                         help=f"不重跑，复用 {RESULT_FILE}（没有就退回 bench.sh 的单轮日志）")
     parser.add_argument("--dry-run", action="store_true", help="只打印，不写文件")
+    parser.add_argument("--runs", type=int, default=3, help="跑几轮取中位（默认 3）")
     parser.add_argument("--force", action="store_true",
                         help="上一行数字完全相同也照样追加（默认视为重复记录，不写）")
     parser.add_argument("--history", default=str(HISTORY),
@@ -371,7 +372,7 @@ def main():
         return fail(2, f"找不到 {history}")
 
     try:
-        payload = read_measurements(args.from_logs)
+        payload = read_measurements(args.from_logs, max(1, args.runs))
     except (FileNotFoundError, ValueError, json.JSONDecodeError) as error:
         return fail(2, f"{error}")
 
