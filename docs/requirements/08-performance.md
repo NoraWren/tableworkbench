@@ -31,13 +31,13 @@
 ## R-PERF-03 滚动与交互
 
 - 优先级：P0
-- 状态：进行中
+- 状态：已完成
 - 行为：滚动和点击必须跟手。
 - 验收：
   - [x] 1000 万行垂直滚动稳定在 60 fps，掉帧率低于 5%（20 列：p95 2.97 毫秒，超 16.7 毫秒的帧 0.2%）
   - [x] 100 列 × 1000 万行横向滚动不掉帧（100 列自绘后 p95 3.09 毫秒，超预算 0.3%）
-  - [ ] 点击一行到选中态出现不超过 50 毫秒
-- 测量方法：Instruments 的 Core Animation 和 Time Profiler；没有 Xcode 时用 scripts/bench-scroll.sh，口径是主线程每帧的布局与绘制耗时。
+  - [x] 点击一行到选中态出现不超过 50 毫秒（release，三份数据各 40 次：p95 3.08 / 2.92 / 2.82 毫秒，最大 45.1 毫秒，超预算 0 次，见 bench-history）
+- 测量方法：Instruments 的 Core Animation 和 Time Profiler；没有 Xcode 时滚动用 scripts/bench-scroll.sh，口径是主线程每帧的布局与绘制耗时；点击用 scripts/bench-click.sh，口径是「按下 → 该行进选中集 → 受影响行重绘完」，不含显卡合成与垂直同步。
 - 边界：不做逐帧打点上报。
 - 依赖：R-GRID-01、R-GRID-02
 
