@@ -28,7 +28,7 @@ TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx file
 - 按列排序，条件筛选，AND/OR 组合
 - SQL 抽屉，只读查询，表名与列名自动补全
 - 一键分析：自动挑维度与度量，一次出 3–5 张图
-- 拖拽字段生成透视表
+- 拖拽字段生成透视表，多级列维度画成多层表头，行维度列横向滚动时冻结
 - 分组图表：柱状、条形、折线、饼图，超过 12 组自动合并“其他”
 - 列检查器：空值、去重、范围、均值、中位数、直方图
 - 导出 CSV / Parquet，Command+C 复制选区为 TSV
