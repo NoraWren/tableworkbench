@@ -30,4 +30,4 @@
 ## 4. 收尾
 
 - [x] 4.1 `openspec validate --all --strict` 全过（24 passed）
-- [ ] 4.2 归档 change，同步 `openspec/specs/bench-history`
+- [x] 4.2 归档 change，同步 `openspec/specs/bench-history`（已补写 Purpose，24 项校验全过）
