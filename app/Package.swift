@@ -42,6 +42,10 @@ let package = Package(
             dependencies: ["Features", "DataGrid", "DuckDBKit"]
         ),
         .executableTarget(
+            name: "TableWorkbenchClickBench",
+            dependencies: ["Features", "DataGrid", "DuckDBKit"]
+        ),
+        .executableTarget(
             name: "TableWorkbenchSnapshot",
             dependencies: ["ChartUI", "DuckDBKit"]
         ),
