@@ -1,5 +1,5 @@
 {
-  "originHash" : "97492c811e61eeac097277fbb09888b8ce83f476ecb9aaef6690978c623472e1",
+  "originHash" : "fe1d3b256fc1ea4bbb74909cb31ea731996562e992efe3612eabc28cb0f13dc9",
   "pins" : [
     {
       "identity" : "corexlsx",
@@ -13,9 +13,9 @@
     {
       "identity" : "duckdb-swift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/duckdb/duckdb-swift",
+      "location" : "https://git.ideatech.info/opensource/duckdb-swift.git",
       "state" : {
-        "revision" : "9583f44fedc20a8e0b6151d2e43f6d850016712f",
+        "revision" : "bfd0508078620f210aa85075929c162b4bd24d61",
         "version" : "1.1.3"
       }
     },

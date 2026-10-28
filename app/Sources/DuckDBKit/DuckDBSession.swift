@@ -40,6 +40,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     private var distinctCache: [String: (generation: Int, count: Int)] = [:]
     private var database: Database?
     private var connection: Connection?
+    /// 中断专用句柄。中断不能拿会话锁——正在跑的查询正握着它，拿了只会排在后面等它跑完。
+    private let interruptHandle: Connection
     private let temporaryDirectory: URL
     private let lock = NSLock()
     private var closed = false
@@ -56,6 +58,7 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     ) {
         self.database = database
         self.connection = connection
+        self.interruptHandle = connection
         self.temporaryDirectory = temporaryDirectory
         self.columns = columns
         self.rowCount = rowCount
@@ -1105,6 +1108,12 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         connection = nil
         database = nil
         try? FileManager.default.removeItem(at: temporaryDirectory)
+    }
+
+    /// 打断正在这条连接上跑的查询。可从任意线程调用，不需要会话锁。
+    /// 被打断的查询会以错误返回，调用方自己决定怎么呈现。
+    public func interrupt() {
+        interruptHandle.interrupt()
     }
 
     private static func quoteIdentifier(_ name: String) -> String {

@@ -36,6 +36,8 @@ public protocol QuerySession: AnyObject, Sendable {
     /// 只取排序与筛选后的前若干行。大表靠它先出首屏，物化在后台继续。
     /// 会话不支持或视图里没有排序筛选时返回 nil，调用方退回原路径。
     func previewBlock(view: QueryView, columns: [ColumnInfo], limit: Int) throws -> TableBlock?
+    /// 打断正在执行的查询。不支持中断的实现什么都不做。
+    func interrupt()
     /// 只取指定列的块，顺序与传入的列一致。宽表只显示前若干列时靠它少查列。
     func block(offset: Int, size: Int, columns: [ColumnInfo]) throws -> TableBlock
     func close()
@@ -73,6 +75,9 @@ public enum ExportScope: Sendable, Equatable {
 public extension QuerySession {
     /// 默认不提供首屏预览。替身会话与不支持预览的实现走这条，界面按老路径一次出全量。
     func previewBlock(view: QueryView, columns: [ColumnInfo], limit: Int) throws -> TableBlock? { nil }
+
+    /// 默认不提供中断能力，替身会话走这条。
+    func interrupt() {}
 }
 
 public enum QuerySessionDefaults {

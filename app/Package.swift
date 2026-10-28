@@ -8,7 +8,9 @@ let package = Package(
         .executable(name: "TableWorkbench", targets: ["TableWorkbenchApp"])
     ],
     dependencies: [
-        .package(url: "https://github.com/duckdb/duckdb-swift", exact: "1.1.3"),
+        // 用自家 GitLab 上的分支，不是 GitHub 原仓：只多了一个 Connection.interrupt()，
+        // 供界面上的「取消」真正打断长查询。见 docs/upstream/duckdb-swift-interrupt.md。
+        .package(url: "https://git.ideatech.info/opensource/duckdb-swift.git", exact: "1.1.3"),
         .package(url: "https://github.com/CoreOffice/CoreXLSX", from: "0.14.2"),
         .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.20")
     ],

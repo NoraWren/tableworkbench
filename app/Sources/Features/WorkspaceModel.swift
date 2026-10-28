@@ -95,6 +95,10 @@ public final class WorkspaceModel: ObservableObject {
     @Published public private(set) var pivotHeader: PivotHeader?
     @Published public private(set) var resultTitle: String?
     @Published public private(set) var isRunningSQL = false
+    /// 用户点过取消、但查询还没返回的标记。查询以错误返回时靠它区分「取消」和「真出错」。
+    private var cancelRequested = false
+    /// 取消后给界面的一句提示，正常流程不显示。
+    @Published public private(set) var cancelledMessage: String?
     @Published public private(set) var columnStats: ColumnStats?
     @Published public private(set) var statsColumn: String?
     @Published public private(set) var isLoadingStats = false
@@ -316,6 +320,8 @@ public final class WorkspaceModel: ObservableObject {
 
         let session = entries[index].session
         isRunningSQL = true
+        cancelRequested = false
+        cancelledMessage = nil
         sqlResult = nil
         // 普通查询没有维度概念，表头回到单层。
         pivotHeader = nil
@@ -337,11 +343,22 @@ public final class WorkspaceModel: ObservableObject {
             if let result = outcome.0 {
                 sqlResult = result
                 sqlHistory.record(trimmed)
+            } else if cancelRequested {
+                // 用户自己取消的，不该弹错误卡片。
+                cancelledMessage = "已取消"
             } else {
                 error = outcome.1
             }
             isRunningSQL = false
         }
+    }
+
+    /// 取消当前正在跑的查询或物化。中断通过 duckdb_interrupt 下达，
+    /// 查询会以错误返回，由上面的 cancelRequested 分支吞掉错误换成「已取消」。
+    public func cancelCurrentQuery() {
+        guard let entry = selectedEntry else { return }
+        cancelRequested = true
+        entry.session.interrupt()
     }
 
     public func runPivot(entryID: UUID, spec: PivotSpec) {

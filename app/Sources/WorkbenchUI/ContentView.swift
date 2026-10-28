@@ -333,6 +333,7 @@ struct ContentView: View {
         }
         .onChange(of: model.selection) { _, _ in configureCommands() }
         .onChange(of: model.isRunningSQL) { _, _ in configureCommands() }
+        .onChange(of: model.isQuerying) { _, _ in configureCommands() }
         .onChange(of: model.isAnalyzing) { _, _ in configureCommands() }
         .onReceive(model.$entries) { _ in configureCommands() }
     }
@@ -343,6 +344,8 @@ struct ContentView: View {
         bus.canExport = bus.hasFile
         bus.canRunSQL = bus.hasFile && !model.isRunningSQL
         bus.hasSQLText = !sql.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        bus.canCancel = model.isRunningSQL || model.isQuerying
+        bus.cancel = { model.cancelCurrentQuery() }
         bus.canAnalyze = bus.hasFile && !model.isAnalyzing
         bus.open = { openPanel() }
         bus.export = {

@@ -10,6 +10,7 @@ public final class CommandBus: ObservableObject {
     @Published public var canRunSQL = false
     @Published public var hasSQLText = false
     @Published public var canAnalyze = false
+    @Published public var canCancel = false
 
     public var open: () -> Void = {}
     public var export: () -> Void = {}
@@ -18,6 +19,7 @@ public final class CommandBus: ObservableObject {
     public var newQuery: () -> Void = {}
     public var analyze: () -> Void = {}
     public var showFilter: () -> Void = {}
+    public var cancel: () -> Void = {}
 
     /// 测试要一份自己的总线来数调用次数，所以构造器不设成 private。
     public init() {}
@@ -32,7 +34,7 @@ public final class CommandBus: ObservableObject {
         case .newQuery: newQuery()
         case .autoAnalysis: analyze()
         case .findFilter: showFilter()
-        case .cancelSQL: break
+        case .cancelSQL: cancel()
         case .toggleSidebar, .toggleInspector, .toggleSQL: break
         }
     }
@@ -44,7 +46,8 @@ public final class CommandBus: ObservableObject {
             hasFile: hasFile,
             canExport: canExport,
             canRunSQL: canRunSQL,
-            canAnalyze: canAnalyze
+            canAnalyze: canAnalyze,
+            canCancel: canCancel
         )
     }
 }

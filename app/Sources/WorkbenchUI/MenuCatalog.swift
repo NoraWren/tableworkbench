@@ -136,10 +136,10 @@ public enum MenuCatalog {
     }
 
     /// 状态下这些条目是否可点，菜单视图直接查表。
-    public static func isEnabled(_ id: MenuItem.ID, hasFile: Bool, canExport: Bool, canRunSQL: Bool, canAnalyze: Bool) -> Bool {
+    public static func isEnabled(_ id: MenuItem.ID, hasFile: Bool, canExport: Bool, canRunSQL: Bool, canAnalyze: Bool, canCancel: Bool) -> Bool {
         switch id {
         case .openFile, .toggleSidebar, .toggleInspector, .toggleSQL: return true
-        case .cancelSQL: return false
+        case .cancelSQL: return canCancel
         case .exportFile: return canExport
         case .closeFile, .newQuery, .findFilter: return hasFile
         case .runSQL: return canRunSQL
