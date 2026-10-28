@@ -309,7 +309,12 @@ public final class WorkspaceModel: ObservableObject {
             if let current = entries.firstIndex(where: { $0.id == entryID }) {
                 entries[current].preview = nil
             }
-            error = outcome.error
+            if cancelRequested {
+                // 用户自己取消的，不弹错误卡片，只留一句已取消。
+                cancelledMessage = "已取消"
+            } else {
+                error = outcome.error
+            }
         }
     }
 

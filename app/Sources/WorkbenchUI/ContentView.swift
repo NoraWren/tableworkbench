@@ -433,6 +433,11 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if let cancelled = model.cancelledMessage {
+                        Text(cancelled)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if model.isExporting {
                         ProgressView()
                             .controlSize(.small)

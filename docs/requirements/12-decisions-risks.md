@@ -313,6 +313,18 @@
 - 推翻条件：如果 DuckDB 支持「从已排序结果继续取」或者内存能整表放下，预览这套中间态就可以去掉。
 - 依赖：R-GRID-04、R-GRID-05、R-DEC-23
 
+## R-DEC-25 取消走自家 GitLab 的 duckdb-swift 分支
+
+- 优先级：P0
+- 状态：已定（2026-10-28）
+- 事实：三处长等待（排序物化、SQL 查询、导出）都缺取消能力，根因是 duckdb-swift 上游没暴露 `duckdb_interrupt`，而它托管在 GitHub，我们没有推送权限。绕过上游的两条路都堵死（`import Cduckdb` 编不过；`dlsym` 加 Mirror 取不到句柄，`_duckdb_connection` 是不可命名的 opaque 类型），见 R-DEC-24。
+- 落地：在 `git.ideatech.info/opensource/duckdb-swift` 建私有分支，内容就是 1.1.3 加三行 `Connection.interrupt()`，打 `1.1.3` 标签；`app/Package.swift` 的依赖指过去，版本仍 `exact: 1.1.3`。应用侧 `QuerySession.interrupt()` 接到 `DuckDBSession`，用独立句柄转发（不拿会话锁，否则等于排队等它跑完）；菜单「取消」从禁用占位改成真动作。
+- 实测：10m.parquet 上触发千万行物化，运行中点「取消」，物化没有再出现完成打点，界面 1 秒内回到空闲——中断本身有效。
+- 没解决：菜单可用性晚一拍。`canCancel` 跟着 `isQuerying` 刷新，刚点完列头 1 秒内去点「取消」，那一击可能落在还禁用的菜单项上被丢掉。端到端复现不稳定，验收没勾。
+- 代价：依赖不再指向上游原仓，包里多一份 C++ 源码要跟着升级维护；上游将来补了这个接口就该切回去。
+- 推翻条件：duckdb-swift 上游合入 `interrupt()`，或者我们放弃取消这个能力。
+- 依赖：R-SQL-01、R-EXP-02、R-GRID-04
+
 ## 风险清单
 
 | 编号 | 风险 | 概率 | 影响 | 应对 |
