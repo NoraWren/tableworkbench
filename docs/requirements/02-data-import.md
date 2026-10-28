@@ -140,4 +140,5 @@
 - 验证：`TableWorkbenchTests` 造真 `NSWindow`，断言 contentView 是容器、注册了 `.fileURL`、铺满内容区、只一层、重复安装不叠层；再用假 `NSDraggingInfo` 按 AppKit 顺序走完 `draggingEntered` → `draggingUpdated` → `prepareForDragOperation` → `performDragOperation`，断言 URL 交到处理函数；换成纯文字断言全部拒绝。`TW_DROP_PROBE=1 TableWorkbenchUIAudit` 打印注册视图与覆盖面积（1200×828 = 100%）。
 - 证据：离屏悬停高亮 [drop-window-highlight.png](../media/verification/drop-window-highlight.png)（真实视图树，模拟文件悬停，边框 3pt）；工具栏窗口换 contentView 前后内容区都是 900×628，toolbar 没丢。
 - 真机验证（2026-10-27 23:29，release 包）：从访达把 bench-data/wide-100k.csv 鼠标拖进主窗口，悬停时窗口内描边亮起 [drop-real-hover.png](../media/verification/drop-real-hover.png)，松开后 100,000 行、15.7 MB、UTF-8 直接进表 [drop-real-loaded.png](../media/verification/drop-real-loaded.png)；同法再拖 bench-data/500mb.csv（524.4 MB）得到 3,266,000 行 [drop-real-500mb.png](../media/verification/drop-real-500mb.png)。系统真把访达的拖拽会话送到接收器这一步，此前是整条链上唯一没验的环节，这一轮补齐。
-- 没证明的：一次拖多个文件只按第一个打开，多文件批量导入没做也没验；跨卷、网络盘、外接盘上的文件拖入未验；从访达以外的应用（浏览器下载列表、解压工具窗口）拖入未验。
+- 多文件：代码把落下的所有 URL 一起交给打开链路（`performDragOperation` → `open(urls:)`），实测一次拖入 sample-20mb.xlsx 与 wide-100k.csv，两条都进左栏；一次拖 5 个以上没逐条数过。
+- 没证明的：跨卷、网络盘、外接盘上的文件拖入未验；从访达以外的应用（浏览器下载列表、解压工具窗口）拖入未验。
