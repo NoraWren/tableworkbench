@@ -33,18 +33,14 @@
 | 项 | 实测结果 |
 |---|---|
 | 系统 | macOS 27.0.1（26A434），arm64 |
-| Swift | 6.4，命令行工具链可用 |
-| Xcode | **未安装**，`xcodebuild` 当前不可用，`xcode-select -p` 指向 CommandLineTools |
+| Swift | 6.4，Xcode 工具链（`xcode-select -p` 指向 /Applications/Xcode.app/Contents/Developer） |
+| Xcode | **已装 27.1（27A9275）**，2026-10-28 从 App Store 安装并接受许可；`@State`/`@Bindable`/`#Preview` 已实测可编译 |
+| 构建目录 | **必须落在 iCloud 之外**：`~/Library/Caches/tableworkbench-build`。仓库在 ~/Documents 下，产物放进 .build 会被 fileprovider 拖住，见第 10 节 |
 | 网络 | GitHub 直连不稳定，`git ls-remote` 可能失败，首次拉 SPM 依赖需要代理或镜像 |
 
-开工前必须做的第一件事：从 App Store 安装 Xcode（约 12GB），然后执行
+Xcode 已于 2026-10-28 装好（27.1，27A9275），App Store 安装时把 `xcode-select` 自动指到了 Xcode，`xcodebuild -version` 有输出。许可通过界面接受，没用上 `sudo xcodebuild -license`。
 
-```
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-xcodebuild -version
-```
-
-装好 Xcode 后，把上面的绕行方案换回 @Observable 与 Swift Testing，并补 `xcodebuild` 构建验证。
+装完之后还没动的两件事：界面层仍在用 ObservableObject 加 @StateObject（宏现在可用了，但换回去是一轮影响几十个文件的机械改动，发布前不做）；测试仍用 TableWorkbenchTests 可执行程序（XCTest 与 Swift Testing 现在都可用，迁移同样留到发布后）。
 
 ## 4. 技术栈（已锁定）
 
@@ -239,8 +235,9 @@ BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py -
 - **行号不要用第二张 NSTableView。** 放进 NSScrollView 当行头时尺寸不可控，会被裁成一位数字。用自绘视图跟随主表滚动，见 design D10。
 - **Gatekeeper。** 没签名的 dmg 用户打不开，会直接劝退。签名账号要提前一个月办。
 - **不要为了快而跳过基准。** 这个项目的全部叙事建在三个数字上，数字虚了，项目就没了。
-- **没有 Xcode 时，SwiftUI 宏不可用。** 命令行工具链缺 SwiftUIMacros，@State、@Bindable 都编译不过。当前代码用 ObservableObject 加 @StateObject 绕开，装好 Xcode 后可以换回 @Observable。
-- **没有 Xcode 时，swift test 不可用。** XCTest 模块不存在，.xctest 打包还会在 codesign 和 CopySwiftLibs 失败。当前用 TableWorkbenchTests 可执行程序跑断言，装好 Xcode 后迁回 Swift Testing。
+- **构建目录不能放在 iCloud 里。** 仓库在 ~/Documents 下，fileprovider 会给产物打上 FinderInfo 与 `com.apple.fileprovider.fpfs#P` 扩展属性。默认的 SwiftBuild 后端给资源包签名时直接失败（`resource fork, Finder information, or similar detritus not allowed`），换 native 后端则会在编译完之后空转、停在 CodeSigningHelper 不动。把 scratch 目录挪到 `~/Library/Caches/tableworkbench-build` 之后，release 全量能编完。脚本里已经这么设了（`TW_BUILD_DIR` 可覆盖）。
+- **`--build-system native` 已被标弃用。** 现在必须带，原生后端不签资源包。将来 SwiftPM 真删了这个开关，正解是把仓库移出 iCloud，而不是继续加别的绕法。
+- **手跑 swift 命令也要带这两个参数。** `swift build --build-system native --scratch-path ~/Library/Caches/tableworkbench-build`。漏掉 scratch 就会在 iCloud 里重建 .build，重新踩上面那个坑。
 - **拉 duckdb-swift 要走代理。** 本机系统代理是 127.0.0.1:7897，git 默认不走，首次 resolve 需要设置 HTTPS_PROXY 和 HTTP_PROXY。
 
 ## 11. 还需要用户拍板的事

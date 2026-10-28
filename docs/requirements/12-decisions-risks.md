@@ -263,6 +263,18 @@
 - 没查到底的：上一轮 0.55–0.63 与这一轮 0.465–0.563 的差异。轮询间隔（上一轮 10 毫秒、这一轮忙等）、系统状态、当时的并发进程三条都对不上 0.1 秒这个量。
 - 依赖：R-PERF-04、R-REL-02
 
+## R-DEC-21 Xcode 27.1 已装，构建目录挪出 iCloud
+
+- 优先级：P0
+- 状态：已定（2026-10-28）
+- 事实：Xcode 27.1（27A9275）已从 App Store 安装，App Store 顺手把 `xcode-select` 指到了 Xcode，许可通过界面接受。实测可用的东西：`xcodebuild -version` 有输出；`@State`/`@Bindable`/`#Preview` 探针能编译（此前只有 @Observable 能过，因为 Observation 的宏一直在命令行工具链里）；XCTest.framework 与 Testing.framework 都在 `Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks`（后者要自己带 `-F`，SwiftPM 的测试 target 会自动带）；Instruments.app 在位。
+- 撞到的坑：仓库在 ~/Documents（iCloud）下。默认的 SwiftBuild 后端给资源包签名时被 fileprovider 的扩展属性挡住——`resource fork, Finder information, or similar detritus not allowed`；换成 `--build-system native` 后不签资源包，但会一直空转到 CodeSigningHelper，两小时后仍未出二进制。把 scratch 目录挪到 `~/Library/Caches/tableworkbench-build` 之后，native 后端下 release 全量（含 DuckDB 的 C++ 部分）能编完，打出来的 .app 打开 wide-100k.csv 正常显示 100000 行。
+- 落地：`scripts/make-app-bundle.sh` 与 6 个 build/bench 脚本都改成 `--build-system native --scratch-path "$scratch"`，`scratch` 默认 `~/Library/Caches/tableworkbench-build`，可用 `TW_BUILD_DIR` 覆盖。仓库内的 `app/.build` 已清掉，避免再往里写。
+- 代价：`--build-system native` 已标弃用，SwiftPM 迟早会删。真删了就得把仓库搬出 iCloud，那才是根治。
+- 没做的：界面层仍是 ObservableObject 加 @StateObject，测试仍是 TableWorkbenchTests 可执行程序。宏和测试框架现在都可用，但迁移是影响几十个文件的机械改动，用户感知为零，安排在发布之后。
+- 推翻条件：如果将来必须在 iCloud 里构建（比如云盘协作），那就不是换参数的问题，得换仓库位置。
+- 依赖：R-MS-01
+
 ## 风险清单
 
 | 编号 | 风险 | 概率 | 影响 | 应对 |

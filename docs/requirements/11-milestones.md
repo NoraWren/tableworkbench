@@ -5,15 +5,15 @@
 ## R-MS-01 前置条件
 
 - 优先级：P0
-- 状态：待验证
+- 状态：部分就绪（Xcode 与 SPM 依赖已就绪，缺签名证书、产品名与开源主体）
 - 行为：正式开工前必须全部就绪。
   - Xcode 安装完成，xcodebuild -version 有输出。
   - Apple Developer 账号已申请（审批可能耗时，先交钱排队）。
   - 网络能拉到 SPM 依赖（GitHub 直连在这台机器上不稳定，需代理）。
   - 产品名与 Bundle ID 已定（R-DEC-06）。
 - 验收：
-  - [ ] xcodebuild -version 有输出
-  - [ ] swift build 能拉下 duckdb-swift 并编译通过
+  - [x] xcodebuild -version 有输出（2026-10-28：Xcode 27.1，27A9275）
+  - [x] swift build 能拉下 duckdb-swift 并编译通过（2026-10-28 release 全量编过，DuckDB 的 C++ 部分一起；构建目录须在 iCloud 之外，见 R-DEC-21）
   - [ ] 签名证书在钥匙串里可见
 - 边界：这一条不完成，后面所有周计划都不成立。
 - 依赖：R-DEC-04、R-DEC-06

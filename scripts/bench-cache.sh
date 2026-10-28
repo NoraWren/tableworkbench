@@ -7,6 +7,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+scratch="${TW_BUILD_DIR:-$HOME/Library/Caches/tableworkbench-build}"  # 构建目录必须在 iCloud 之外，见 AGENTS.md 第 10 节
 
 rounds="${1:-3}"
 budget=20
@@ -18,8 +19,8 @@ if [ ! -f "$source_file" ]; then
 fi
 
 echo "构建 release 版本…"
-swift build --package-path app -c release --product TableWorkbenchBench >/dev/null
-bin="$(swift build --package-path app -c release --show-bin-path)/TableWorkbenchBench"
+swift build --build-system native --scratch-path "$scratch" --package-path app -c release --product TableWorkbenchBench >/dev/null
+bin="$(swift build --build-system native --scratch-path "$scratch" --package-path app -c release --show-bin-path)/TableWorkbenchBench"
 
 echo
 echo "== 500 MB CSV 后台转 Parquet（预算 ${budget} 秒）=="

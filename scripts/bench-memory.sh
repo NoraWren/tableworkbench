@@ -15,6 +15,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+scratch="${TW_BUILD_DIR:-$HOME/Library/Caches/tableworkbench-build}"  # 构建目录必须在 iCloud 之外，见 AGENTS.md 第 10 节
 
 long=0
 for arg in "$@"; do
@@ -52,8 +53,8 @@ if [ "$missing" = "1" ]; then
 fi
 
 echo "构建 release 版本…"
-swift build --package-path app -c release --product TableWorkbenchMemoryBench >/dev/null
-bin="$(swift build --package-path app -c release --show-bin-path)/TableWorkbenchMemoryBench"
+swift build --build-system native --scratch-path "$scratch" --package-path app -c release --product TableWorkbenchMemoryBench >/dev/null
+bin="$(swift build --build-system native --scratch-path "$scratch" --package-path app -c release --show-bin-path)/TableWorkbenchMemoryBench"
 
 echo
 echo "== 连续开关 20 个大文件（10 个文件 × 2 轮，静置 60 秒后判定，上限 +200 MB）=="

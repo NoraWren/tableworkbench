@@ -6,14 +6,15 @@
 # 用法：默认 release 构建（性能数字只认 release）；
 #       DEBUG=1 ./scripts/make-clickbench-bundle.sh 装 debug 版本，仅用于排查。
 set -euo pipefail
+scratch="${TW_BUILD_DIR:-$HOME/Library/Caches/tableworkbench-build}"  # 构建目录必须在 iCloud 之外，见 AGENTS.md 第 10 节
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 bundle="$root/build/ClickBench.app"
 config="release"
 if [ "${DEBUG:-0}" = "1" ]; then config="debug"; fi
 
-swift build --package-path "$root/app" -c "$config" --product TableWorkbenchClickBench >/dev/null
-bin="$(swift build --package-path "$root/app" --show-bin-path -c "$config")/TableWorkbenchClickBench"
+swift build --build-system native --scratch-path "$scratch" --package-path "$root/app" -c "$config" --product TableWorkbenchClickBench >/dev/null
+bin="$(swift build --build-system native --scratch-path "$scratch" --package-path "$root/app" --show-bin-path -c "$config")/TableWorkbenchClickBench"
 
 if [ -d "$bundle" ]; then
   python3 -c "import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" "$bundle"

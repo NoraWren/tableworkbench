@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
+scratch="${TW_BUILD_DIR:-$HOME/Library/Caches/tableworkbench-build}"  # 构建目录必须在 iCloud 之外，见 AGENTS.md 第 10 节
 
 if [ ! -f bench-data/wide-100k.csv ]; then
   echo "缺少基准数据，先运行 ./scripts/make-bench-data.sh" >&2
@@ -10,8 +11,8 @@ if [ ! -f bench-data/wide-100k.csv ]; then
 fi
 
 echo "构建 release 版本…"
-swift build --package-path app -c release --product TableWorkbenchScrollBench >/dev/null
-bin="$(swift build --package-path app --show-bin-path -c release)/TableWorkbenchScrollBench"
+swift build --build-system native --scratch-path "$scratch" --package-path app -c release --product TableWorkbenchScrollBench >/dev/null
+bin="$(swift build --build-system native --scratch-path "$scratch" --package-path app --show-bin-path -c release)/TableWorkbenchScrollBench"
 
 run() {
   local file="$1"

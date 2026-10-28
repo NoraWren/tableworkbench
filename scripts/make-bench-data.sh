@@ -16,6 +16,7 @@
 # Parquet 由应用自己的导出通道生成（TableWorkbenchBench --export-parquet），
 # 不依赖外部 duckdb 命令行，保证读写的都是同一份代码产出的 Parquet。
 set -euo pipefail
+scratch="${TW_BUILD_DIR:-$HOME/Library/Caches/tableworkbench-build}"  # 构建目录必须在 iCloud 之外，见 AGENTS.md 第 10 节
 
 env_or() {
   # $1 变量名  $2 默认值
@@ -445,10 +446,10 @@ fi
 # ------------------------------------------------------------ 4. Parquet
 bench_bin() {
   local bin
-  bin="$(swift build --package-path "$root/app" -c release --show-bin-path 2>/dev/null)/TableWorkbenchBench"
+  bin="$(swift build --build-system native --scratch-path "$scratch" --package-path "$root/app" -c release --show-bin-path 2>/dev/null)/TableWorkbenchBench"
   if [ ! -x "$bin" ]; then
     echo "构建 TableWorkbenchBench（release）…" >&2
-    swift build --package-path "$root/app" -c release --product TableWorkbenchBench >/dev/null
+    swift build --build-system native --scratch-path "$scratch" --package-path "$root/app" -c release --product TableWorkbenchBench >/dev/null
   fi
   echo "$bin"
 }
