@@ -238,6 +238,7 @@ BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py -
 - **构建目录不能放在 iCloud 里。** 仓库在 ~/Documents 下，fileprovider 会给产物打上 FinderInfo 与 `com.apple.fileprovider.fpfs#P` 扩展属性。默认的 SwiftBuild 后端给资源包签名时直接失败（`resource fork, Finder information, or similar detritus not allowed`），换 native 后端则会在编译完之后空转、停在 CodeSigningHelper 不动。把 scratch 目录挪到 `~/Library/Caches/tableworkbench-build` 之后，release 全量能编完。脚本里已经这么设了（`TW_BUILD_DIR` 可覆盖）。
 - **`--build-system native` 已被标弃用。** 现在必须带，原生后端不签资源包。将来 SwiftPM 真删了这个开关，正解是把仓库移出 iCloud，而不是继续加别的绕法。
 - **手跑 swift 命令也要带这两个参数。** `swift build --build-system native --scratch-path ~/Library/Caches/tableworkbench-build`。漏掉 scratch 就会在 iCloud 里重建 .build，重新踩上面那个坑。
+- **`git status` 有时会卡住。** 它要刷新索引并拿 .git/index 的锁，fileprovider 正好在同步这个目录时就一直等。急用时加 `git --no-optional-locks`，查询类命令（log/rev-parse/diff）都不受影响。
 - **拉 duckdb-swift 要走代理。** 本机系统代理是 127.0.0.1:7897，git 默认不走，首次 resolve 需要设置 HTTPS_PROXY 和 HTTP_PROXY。
 
 ## 11. 还需要用户拍板的事
