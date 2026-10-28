@@ -792,6 +792,25 @@ MenuBarClientCore 也在这期间做软链接加载。看得出来这是系统�
 - 应用代码这一轮一行没改，构建产物与上一轮一致，包体积仍是 15 MB / 53 MB。
 - `/tmp/minapp`（70 KB 对照应用）与 `/tmp/tw_stripped` 是实验产物，不在仓库里。
 
+## Instruments 可用性摸底（2026-10-28）
+
+装好 Xcode 27.1 之后先摸清 xctrace 这台机器上能采什么，别等到要出数字时才发现采不到。结论按"能用/不能用"记。
+
+能采：
+
+| 模板 | 结果 | 备注 |
+|---|---|---|
+| Time Profiler | 11 MB trace，有 time-profile 表 | `--launch` 模式（把 .app 包交给 xctrace 启动）能采到 |
+| Allocations | 9.2 MB trace，有 event_data | 同上 |
+| System Trace（all-processes） | 37 MB trace，有数据 | `--all-processes` 模式 |
+
+采不到：
+
+- **Animation Hitches**：`--launch` 与 `--attach` 两种模式都只产出 40 KB 空壳（只有 RunIssues，没有 instrument_data），导出报 `Document Missing Template Error`。这个模板在 macOS 上对这类 AppKit 表格应用拿不到帧级数据，说明"滚动每帧耗时"这条还是只能靠自建的离屏基准加 ffmpeg 帧差，Instruments 补不上。
+- **`--attach <pid>`**：同样是空壳。`DevToolsSecurity -status` 报 `Developer mode is currently disabled`（当前用户其实已在 `_developer` 组里），要 `sudo DevToolsSecurity -enable` 或到"系统设置 → 隐私与安全性 → 开发者模式"打开才行，这一步要管理员密码。
+
+第一次跑 Time Profiler 只拿到启动阶段的 553 个主线程样本（状态全 Running），滚动那几秒没进来。原因是 xctrace 自己起了一个实例，而动作是发给 `open -a` 起的另一个实例（当时 `pgrep` 数到 3 个进程）。要采滚动就有两条路：开开发者模式后 attach 到已经打开文件的实例；或者保证单实例，改用应用内 Cmd+O 打开文件。
+
 ## 说明
 
 - 数字退化超过 10% 时，在提交说明里写原因和打算怎么办。
