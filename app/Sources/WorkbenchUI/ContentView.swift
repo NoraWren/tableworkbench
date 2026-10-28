@@ -421,6 +421,12 @@ struct ContentView: View {
                         ProgressView()
                             .controlSize(.small)
                     }
+                    if let preview = entry.preview {
+                        // 预览只有前几千行、总行数还在算，必须说明白，别让人以为这就是全部。
+                        Text("排序中，先显示前 \(preview.rows.count) 行，总行数稍后补齐")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if model.isExporting {
                         ProgressView()
                             .controlSize(.small)
@@ -447,10 +453,14 @@ struct ContentView: View {
                 let shownColumns = model.shownColumns(for: entry)
                 DataGridView(
                     columns: shownColumns,
-                    rowCount: entry.resultCount,
+                    // 预览态下只显示预览块那几千行，滚动范围跟着收窄，等全量结果回来再展开。
+                    rowCount: entry.preview?.rows.count ?? entry.resultCount,
                     sorts: entry.sort,
                     provider: { offset, size in
-                        try entry.session.block(offset: offset, size: size, columns: shownColumns)
+                        if let preview = entry.preview {
+                            return offset == 0 ? preview : TableBlock(offset: offset, rows: [])
+                        }
+                        return try entry.session.block(offset: offset, size: size, columns: shownColumns)
                     },
                     onSortClick: { column, additive in
                         model.toggleSort(entryID: entry.id, column: column, additive: additive)

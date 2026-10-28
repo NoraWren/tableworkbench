@@ -4,6 +4,9 @@ import DuckDBKit
 
 @MainActor
 public final class WorkspaceModel: ObservableObject {
+    /// 表到这个行数才值得先出排序首屏，见 R-DEC-23 的后续。
+    static let previewRowThreshold = 500_000
+
     public let sqlHistory = SQLHistoryStore()
 
     public struct RowField: Identifiable, Sendable {
@@ -44,6 +47,9 @@ public final class WorkspaceModel: ObservableObject {
         public var filter: FilterGroup?
         public var resultCount: Int
         public var queryVersion: Int = 0
+        /// 排序或筛选还没算完时先显示的首屏。有它的时候网格只看这几千行，
+        /// 总行数仍在算，界面上要说清楚这一点。
+        public var preview: TableBlock?
 
         public init(
             id: UUID = UUID(),
@@ -231,9 +237,24 @@ public final class WorkspaceModel: ObservableObject {
     private func apply(view: QueryView, to index: Int) {
         let session = entries[index].session
         let entryID = entries[index].id
+        let columns = session.displayColumns
+        // 小表物化本来就是几十毫秒，先出预览只会让界面闪一下，所以只在够大的表上做。
+        let wantsPreview = entries[index].rowCount >= WorkspaceModel.previewRowThreshold
+            && (!view.sort.isEmpty || view.filter != nil)
         isQuerying = true
 
         Task {
+            if wantsPreview {
+                OpenTiming.mark("首屏预览开始")
+                let preview = await Task.detached(priority: .userInitiated) { () -> TableBlock? in
+                    (try? session.previewBlock(view: view, columns: columns, limit: QuerySessionDefaults.blockSize)) ?? nil
+                }.value
+                if let preview, let current = entries.firstIndex(where: { $0.id == entryID }) {
+                    entries[current].preview = preview
+                    OpenTiming.mark("首屏预览就绪 \(preview.rows.count) 行")
+                }
+            }
+
             let outcome = await Task.detached(priority: .userInitiated) { () -> (count: Int?, error: ImportError?) in
                 do {
                     try session.apply(view: view)
@@ -251,9 +272,14 @@ public final class WorkspaceModel: ObservableObject {
                     entries[current].sort = view.sort
                     entries[current].filter = view.filter
                     entries[current].resultCount = count
+                    // 全量结果就绪，预览态收掉，网格按新的 queryVersion 重建。
+                    entries[current].preview = nil
                     entries[current].queryVersion += 1
                 }
             } else {
+                if let current = entries.firstIndex(where: { $0.id == entryID }) {
+                    entries[current].preview = nil
+                }
                 error = outcome.error
             }
             isQuerying = false

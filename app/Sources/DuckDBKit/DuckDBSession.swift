@@ -1002,21 +1002,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         if resultCount == 0 || safeOffset >= resultCount {
             return TableBlock(offset: safeOffset, rows: [])
         }
-        var selectParts: [String] = []
-        selectParts.reserveCapacity(requested.count)
-        for info in requested {
-            if info.isComputed {
-                if let computed = computedColumns.first(where: { $0.name == info.name }) {
-                    selectParts.append("CAST((\(computed.expression)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier(computed.name))")
-                }
-            } else {
-                selectParts.append(SQLBuilder.selectList([info]))
-            }
-        }
-        if selectParts.isEmpty {
+        guard let selectList = selectListSQL(for: requested) else {
             return TableBlock(offset: safeOffset, rows: [])
         }
-        let selectList = selectParts.joined(separator: ", ")
         let table = hasResultTable ? "\"__result\"" : "\"__base\""
         let upperBound = safeOffset + safeSize
         // __result 是物化表，用 rowid；只有直接查 Parquet 视图时才用 __rid。
@@ -1035,27 +1023,78 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
         do {
             let result = try connection.query(sql)
-            let resultRows = Int(result.rowCount)
-            var typed: [Column<String>] = []
-            typed.reserveCapacity(Int(result.columnCount))
-            for index in 0..<Int(result.columnCount) {
-                typed.append(result.column(at: DBInt(index)).cast(to: String.self))
-            }
-
-            var rows: [[String?]] = []
-            rows.reserveCapacity(resultRows)
-            for rowIndex in 0..<resultRows {
-                var row: [String?] = []
-                row.reserveCapacity(typed.count)
-                for column in typed {
-                    row.append(column[DBInt(rowIndex)])
-                }
-                rows.append(row)
-            }
-            return TableBlock(offset: safeOffset, rows: rows)
+            return tableBlock(from: result, offset: safeOffset)
         } catch {
             throw ImportError.wrap(error, step: "读取数据")
         }
+    }
+
+    /// 只取排序与筛选后的前若干行，给「大表先出首屏」用。
+    /// DuckDB 对 ORDER BY + LIMIT 走堆式 top-N，不用把整表排完：千万行取 5000 行实测 0.61 秒，
+    /// 而整表物化要 5–8 秒。不带排序和筛选时没有预览的意义，返回 nil 让调用方走原路径。
+    public func previewBlock(view: QueryView, columns requested: [ColumnInfo], limit: Int) throws -> TableBlock? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !closed, let connection else { return nil }
+        let whereSQL = SQLBuilder.whereClause(view.filter)
+        let orderSQL = SQLBuilder.orderBy(view.sort)
+        guard !whereSQL.isEmpty || !orderSQL.isEmpty else { return nil }
+        guard let selectList = selectListSQL(for: requested) else { return nil }
+
+        let inner = [
+            "SELECT \(selectList) FROM \"__base\"",
+            whereSQL,
+            orderSQL
+        ].filter { !$0.isEmpty }.joined(separator: " ")
+        let sql = "SELECT * FROM (\(inner)) AS t LIMIT \(max(0, limit))"
+        if DuckDBSession.logsBlockSQL {
+            OpenTiming.append("[preview] \(sql)\n")
+        }
+        do {
+            let result = try connection.query(sql)
+            return tableBlock(from: result, offset: 0)
+        } catch {
+            throw ImportError.wrap(error, step: "预览排序结果")
+        }
+    }
+
+    /// 一组列翻译成 SELECT 列表。计算列走表达式，普通列按名字投影。
+    private func selectListSQL(for requested: [ColumnInfo]) -> String? {
+        var parts: [String] = []
+        parts.reserveCapacity(requested.count)
+        for info in requested {
+            if info.isComputed {
+                if let computed = computedColumns.first(where: { $0.name == info.name }) {
+                    parts.append("CAST((\(computed.expression)) AS VARCHAR) AS \(SQLBuilder.quoteIdentifier(computed.name))")
+                }
+            } else {
+                parts.append(SQLBuilder.selectList([info]))
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    /// 结果集转成表格块，取块与首屏预览共用。
+    private func tableBlock(from result: ResultSet, offset: Int) -> TableBlock {
+        let resultRows = Int(result.rowCount)
+        var typed: [Column<String>] = []
+        typed.reserveCapacity(Int(result.columnCount))
+        for index in 0..<Int(result.columnCount) {
+            typed.append(result.column(at: DBInt(index)).cast(to: String.self))
+        }
+
+        var rows: [[String?]] = []
+        rows.reserveCapacity(resultRows)
+        for rowIndex in 0..<resultRows {
+            var row: [String?] = []
+            row.reserveCapacity(typed.count)
+            for column in typed {
+                row.append(column[DBInt(rowIndex)])
+            }
+            rows.append(row)
+        }
+        return TableBlock(offset: offset, rows: rows)
     }
 
     public func close() {

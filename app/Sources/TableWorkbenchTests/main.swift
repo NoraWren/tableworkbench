@@ -254,6 +254,18 @@ func run() throws {
     check("升序首行 d", try query.session.block(offset: 0, size: 1).rows.first?.first == "d")
     check("查询代次自增", query.session.generation == 1)
 
+    // 大表首屏预览：只取排好序的前若干行，不物化整表（R-GRID-04）
+    let preview = try query.session.previewBlock(
+        view: QueryView(sort: [SortSpec(column: "amount", ascending: false)]),
+        columns: query.session.displayColumns,
+        limit: 3
+    )
+    check("预览块不超过 limit", preview?.rows.count == 3)
+    let previewAmounts = (preview?.rows ?? []).compactMap { $0.count > 1 ? Double($0[1] ?? "") : nil }
+    check("预览按金额降序", previewAmounts == previewAmounts.sorted(by: >) && previewAmounts.first == 400)
+    check("预览首行是最大值", preview?.rows.first?.first == "O'Brien")
+    check("没有排序筛选就不给预览", try query.session.previewBlock(view: .empty, columns: query.session.displayColumns, limit: 3) == nil)
+
     try query.session.apply(view: QueryView(filter: FilterGroup(join: .and, conditions: [
         FilterCondition(column: "city", op: .equal, value: "上海")
     ])))

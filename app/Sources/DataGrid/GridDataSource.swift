@@ -125,6 +125,7 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
         guard let provider else { return nil }
         guard !failedBlocks.contains(blockIndex) else { return nil }
         do {
+            if !markedFirstBlock { OpenTiming.mark("首块查询开始") }
             let block = try provider(blockIndex * blockSize, blockSize)
             cache.insert(block, for: blockIndex)
             if !markedFirstBlock {

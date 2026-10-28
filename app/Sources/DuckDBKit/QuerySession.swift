@@ -33,6 +33,9 @@ public protocol QuerySession: AnyObject, Sendable {
     /// 添加一个只存在于当前会话的计算列。
     func addComputedColumn(name: String, expression: String) throws
     func block(offset: Int, size: Int) throws -> TableBlock
+    /// 只取排序与筛选后的前若干行。大表靠它先出首屏，物化在后台继续。
+    /// 会话不支持或视图里没有排序筛选时返回 nil，调用方退回原路径。
+    func previewBlock(view: QueryView, columns: [ColumnInfo], limit: Int) throws -> TableBlock?
     /// 只取指定列的块，顺序与传入的列一致。宽表只显示前若干列时靠它少查列。
     func block(offset: Int, size: Int, columns: [ColumnInfo]) throws -> TableBlock
     func close()
@@ -65,6 +68,11 @@ public enum ExportScope: Sendable, Equatable {
     case all
     /// 指定行，顺序按网格显示顺序。
     case rows(IndexSet)
+}
+
+public extension QuerySession {
+    /// 默认不提供首屏预览。替身会话与不支持预览的实现走这条，界面按老路径一次出全量。
+    func previewBlock(view: QueryView, columns: [ColumnInfo], limit: Int) throws -> TableBlock? { nil }
 }
 
 public enum QuerySessionDefaults {
