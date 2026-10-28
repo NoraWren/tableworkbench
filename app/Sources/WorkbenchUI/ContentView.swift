@@ -674,15 +674,21 @@ private struct SidebarView: View {
 
             Section("数据源") {
                 ForEach(model.entries) { entry in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.displayName)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Text("\(entry.rowCount) 行 · \(entry.encoding.displayName)")
-                            .font(.caption)
+                    HStack(spacing: 9) {
+                        Image(systemName: "tablecells")
+                            .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(.secondary)
+                            .frame(width: 15)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.displayName)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Text("\(entry.rowCount) 行 · \(entry.encoding.displayName)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 3)
                     .tag(entry.id)
                 }
             }
@@ -710,21 +716,65 @@ private struct SidebarView: View {
 
 private struct EmptyStateView: View {
     var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "tablecells")
-                .font(.system(size: 52, weight: .light))
-                .foregroundStyle(.secondary)
-            Text("把一个 CSV 或 TSV 拖进来")
-                .font(.title3)
-            Text("支持 CSV、TSV、Parquet 和 Excel（xlsx）")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        VStack(spacing: 24) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.20), Color.accentColor.opacity(0.03)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 112, height: 112)
+                Image(systemName: "tablecells")
+                    .font(.system(size: 46, weight: .light))
+                    .foregroundStyle(.tint)
+            }
+
+            VStack(spacing: 8) {
+                Text("把一个 CSV 或 TSV 拖进来")
+                    .font(.system(size: 21, weight: .semibold))
+                Text("支持 CSV、TSV、Parquet 和 Excel（xlsx）")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 14) {
+                shortcutHint("⌘O", "打开")
+                hintDivider
+                shortcutHint("⌘J", "SQL")
+                hintDivider
+                shortcutHint("⇧⌘E", "导出")
+            }
+            .padding(.top, 2)
+
             Text("数据不出本机")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+    }
+
+    private var hintDivider: some View {
+        Rectangle()
+            .fill(.quaternary)
+            .frame(width: 1, height: 12)
+    }
+
+    private func shortcutHint(_ keys: String, _ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(keys)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 5))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 
@@ -751,7 +801,10 @@ private struct InspectorView: View {
                                             Text(column.displayName)
                                                 .fontWeight(model.statsColumn == column.name ? .semibold : .regular)
                                             Text(column.typeName)
-                                                .font(.caption)
+                                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                                .padding(.horizontal, 5)
+                                                .padding(.vertical, 1)
+                                                .background(.quaternary.opacity(0.55), in: Capsule())
                                                 .foregroundStyle(.secondary)
                                         }
                                         Spacer()
