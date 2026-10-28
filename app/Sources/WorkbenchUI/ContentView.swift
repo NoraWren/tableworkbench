@@ -429,7 +429,7 @@ struct ContentView: View {
                     }
                     // 任务一出现就给一个能点的停止按钮。菜单项的可用性晚一拍，
                     // 刚点完列头就去点菜单会被丢掉，这条路径不受那个时延影响。
-                    if model.isQuerying || model.isRunningSQL {
+                    if model.isQuerying || model.isRunningSQL || model.isExporting {
                         Button("停止") { model.cancelCurrentQuery() }
                             .controlSize(.small)
                             .buttonStyle(.link)

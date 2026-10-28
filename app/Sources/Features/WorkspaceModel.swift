@@ -578,6 +578,8 @@ public final class WorkspaceModel: ObservableObject {
         let session = entries[index].session
         isExporting = true
         lastExportMessage = nil
+        cancelRequested = false
+        cancelledMessage = nil
 
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> (Int?, ImportError?) in
@@ -599,7 +601,12 @@ public final class WorkspaceModel: ObservableObject {
                 }
                 lastExportMessage = "已导出\(scopeName) \(count) 行到 \(url.lastPathComponent)"
             } else {
-                error = outcome.1
+                if cancelRequested {
+                    // 取消导出：临时文件已由会话层删掉，目标位置不会留半截文件。
+                    cancelledMessage = "已取消导出"
+                } else {
+                    error = outcome.1
+                }
             }
             isExporting = false
         }

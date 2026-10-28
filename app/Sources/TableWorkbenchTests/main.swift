@@ -941,6 +941,18 @@ func run() throws {
     check("CSV 带 UTF-8 BOM", csvPrefix.elementsEqual([0xEF, 0xBB, 0xBF]))
     let exported = try FileImporter.open(url: exportURL)
     check("CSV 导出行数 6", exported.session.rowCount == 6)
+
+    // 导出失败或取消时不留半截文件（R-EXP-02）：写不进去的目标位置，目录里不该冒任何临时件
+    let blockedDirectory = working.appendingPathComponent("no-such-dir", isDirectory: true)
+    var exportFailed = false
+    do {
+        _ = try query.session.export(to: blockedDirectory.appendingPathComponent("x.csv"), format: .csv)
+    } catch {
+        exportFailed = true
+    }
+    check("导出失败会报错", exportFailed)
+    let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: working.path))?.filter { $0.contains("tmp-") } ?? []
+    check("失败的导出不留临时文件", leftovers.isEmpty)
     check("CSV 导出可再次打开", try exported.session.block(offset: 0, size: 1).rows.first?.first == "a")
 
     let parquetURL = working.appendingPathComponent("export.parquet")
@@ -1958,7 +1970,7 @@ func run() throws {
     // 可用状态：没有文件时只有打开和视图开关可点。
     func enabledWhenFile(_ hasFile: Bool) -> [MenuItem.ID] {
         menus.filter {
-            MenuCatalog.isEnabled($0.id, hasFile: hasFile, canExport: hasFile, canRunSQL: hasFile, canAnalyze: hasFile)
+            MenuCatalog.isEnabled($0.id, hasFile: hasFile, canExport: hasFile, canRunSQL: hasFile, canAnalyze: hasFile, canCancel: hasFile)
         }.map(\.id)
     }
     let withoutFile = enabledWhenFile(false)
@@ -1969,8 +1981,12 @@ func run() throws {
     check("没有文件时查找置灰", !withoutFile.contains(.findFilter))
     check("没有文件时仍能打开", withoutFile.contains(.openFile))
     check("没有文件时视图开关仍可用", withoutFile.contains(.toggleSidebar) && withoutFile.contains(.toggleSQL))
-    check("取消查询一直置灰", !MenuCatalog.isEnabled(
-        .cancelSQL, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: true
+    // 取消项跟着任务状态走：没有在跑的任务时置灰，有任务时可点（R-SQL-01）。
+    check("没有任务时取消置灰", !MenuCatalog.isEnabled(
+        .cancelSQL, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: true, canCancel: false
+    ))
+    check("有任务时取消可点", MenuCatalog.isEnabled(
+        .cancelSQL, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: true, canCancel: true
     ))
     let withFile = enabledWhenFile(true)
     check("有文件后导出恢复", withFile.contains(.exportFile))
@@ -1978,7 +1994,7 @@ func run() throws {
     check("有文件后运行恢复", withFile.contains(.runSQL))
     check("有文件后新建查询恢复", withFile.contains(.newQuery))
     check("一键分析跟着分析状态走", !MenuCatalog.isEnabled(
-        .autoAnalysis, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: false
+        .autoAnalysis, hasFile: true, canExport: true, canRunSQL: true, canAnalyze: false, canCancel: true
     ))
     check("视图标题随开关变化", MenuCatalog.viewTitle(.toggleSQL, isOn: false) == "显示 SQL 抽屉")
 
