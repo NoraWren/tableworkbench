@@ -6,6 +6,10 @@ import DuckDBKit
 public final class WorkspaceModel: ObservableObject {
     /// 表到这个行数才值得先出排序首屏，见 R-DEC-23 的后续。
     static let previewRowThreshold = 500_000
+    /// 每个文件最新的排序/筛选请求。连点列头时只留最后一个。
+    private var desiredViews: [UUID: QueryView] = [:]
+    /// 正在跑 worker 的文件，保证同一个条目同时只有一条查询在物化。
+    private var applyingEntries: Set<UUID> = []
 
     public let sqlHistory = SQLHistoryStore()
 
@@ -235,54 +239,73 @@ public final class WorkspaceModel: ObservableObject {
     }
 
     private func apply(view: QueryView, to index: Int) {
-        let session = entries[index].session
         let entryID = entries[index].id
+        // 连点列头时只保留最后一次：正在跑的那次照常跑完（duckdb-swift 没有可用的中断接口，
+        // 底层的 duckdb_interrupt 在包内 target 里），中间排队的那些直接丢掉，
+        // 不用把每一次排序都老老实实物化一遍。
+        desiredViews[entryID] = view
+        isQuerying = true
+        guard !applyingEntries.contains(entryID) else { return }
+        applyingEntries.insert(entryID)
+
+        Task {
+            while let nextView = desiredViews[entryID] {
+                desiredViews[entryID] = nil
+                await performApply(view: nextView, entryID: entryID)
+            }
+            applyingEntries.remove(entryID)
+            isQuerying = false
+        }
+    }
+
+    /// 真正执行一次排序或筛选。连点期间更新的请求由 worker 循环接着做。
+    private func performApply(view: QueryView, entryID: UUID) async {
+        guard let index = entries.firstIndex(where: { $0.id == entryID }) else { return }
+        let session = entries[index].session
         let columns = session.displayColumns
         // 小表物化本来就是几十毫秒，先出预览只会让界面闪一下，所以只在够大的表上做。
         let wantsPreview = entries[index].rowCount >= WorkspaceModel.previewRowThreshold
             && (!view.sort.isEmpty || view.filter != nil)
-        isQuerying = true
 
-        Task {
-            if wantsPreview {
-                OpenTiming.mark("首屏预览开始")
-                let preview = await Task.detached(priority: .userInitiated) { () -> TableBlock? in
-                    (try? session.previewBlock(view: view, columns: columns, limit: QuerySessionDefaults.blockSize)) ?? nil
-                }.value
-                if let preview, let current = entries.firstIndex(where: { $0.id == entryID }) {
-                    entries[current].preview = preview
-                    OpenTiming.mark("首屏预览就绪 \(preview.rows.count) 行")
-                }
-            }
-
-            let outcome = await Task.detached(priority: .userInitiated) { () -> (count: Int?, error: ImportError?) in
-                do {
-                    try session.apply(view: view)
-                    return (session.resultCount, nil)
-                } catch let importError as ImportError {
-                    return (nil, importError)
-                } catch {
-                    return (nil, ImportError.wrap(error, step: "执行查询"))
-                }
+        if wantsPreview {
+            OpenTiming.mark("首屏预览开始")
+            let preview = await Task.detached(priority: .userInitiated) { () -> TableBlock? in
+                (try? session.previewBlock(view: view, columns: columns, limit: QuerySessionDefaults.blockSize)) ?? nil
             }.value
-
-            if let count = outcome.count {
-                // 查询期间可能关掉或打开别的文件，按 id 重新定位，别写错行。
-                if let current = entries.firstIndex(where: { $0.id == entryID }) {
-                    entries[current].sort = view.sort
-                    entries[current].filter = view.filter
-                    entries[current].resultCount = count
-                    // 全量结果就绪，预览态收掉，网格按新的 queryVersion 重建。
-                    entries[current].preview = nil
-                    entries[current].queryVersion += 1
-                }
-            } else {
-                if let current = entries.firstIndex(where: { $0.id == entryID }) {
-                    entries[current].preview = nil
-                }
-                error = outcome.error
+            // 预览回来时如果已经有更新的请求在排队，就别拿旧结果再占一次界面。
+            if let preview, desiredViews[entryID] == nil,
+               let current = entries.firstIndex(where: { $0.id == entryID }) {
+                entries[current].preview = preview
+                OpenTiming.mark("首屏预览就绪 \(preview.rows.count) 行")
             }
-            isQuerying = false
+        }
+
+        let outcome = await Task.detached(priority: .userInitiated) { () -> (count: Int?, error: ImportError?) in
+            do {
+                try session.apply(view: view)
+                return (session.resultCount, nil)
+            } catch let importError as ImportError {
+                return (nil, importError)
+            } catch {
+                return (nil, ImportError.wrap(error, step: "执行查询"))
+            }
+        }.value
+
+        if let count = outcome.count {
+            // 查询期间可能关掉或打开别的文件，按 id 重新定位，别写错行。
+            if let current = entries.firstIndex(where: { $0.id == entryID }) {
+                entries[current].sort = view.sort
+                entries[current].filter = view.filter
+                entries[current].resultCount = count
+                // 全量结果就绪，预览态收掉，网格按新的 queryVersion 重建。
+                entries[current].preview = nil
+                entries[current].queryVersion += 1
+            }
+        } else {
+            if let current = entries.firstIndex(where: { $0.id == entryID }) {
+                entries[current].preview = nil
+            }
+            error = outcome.error
         }
     }
 
