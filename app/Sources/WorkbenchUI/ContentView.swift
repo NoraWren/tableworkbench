@@ -427,6 +427,13 @@ struct ContentView: View {
                         ProgressView()
                             .controlSize(.small)
                     }
+                    // 任务一出现就给一个能点的停止按钮。菜单项的可用性晚一拍，
+                    // 刚点完列头就去点菜单会被丢掉，这条路径不受那个时延影响。
+                    if model.isQuerying || model.isRunningSQL {
+                        Button("停止") { model.cancelCurrentQuery() }
+                            .controlSize(.small)
+                            .buttonStyle(.link)
+                    }
                     if let preview = entry.preview {
                         // 预览只有前几千行、总行数还在算，必须说明白，别让人以为这就是全部。
                         Text("排序中，先显示前 \(preview.rows.count) 行，总行数稍后补齐")
