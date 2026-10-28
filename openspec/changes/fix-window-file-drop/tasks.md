@@ -20,7 +20,7 @@
 - [x] 3.4 TW_DROP_PROBE 打印注册视图与覆盖面积，并截换成容器后的窗口图
 - [x] 3.5 TableWorkbenchTests 全绿（498 项）
 - [x] 3.6 真机从访达拖一次 bench-data/wide-100k.csv，补一张截图到 docs/media/verification/（2026-10-27 23:29 真机拖 wide-100k.csv 与 500mb.csv 各一次，悬停高亮、100,000 行、3,266,000 行三张截图在 docs/media/verification/drop-real-*.png）
-- [ ] 3.7 重录第一屏 GIF，把拖入动作放进前 3 秒
+- [x] 3.7 重录第一屏 GIF，把拖入动作放进前 3 秒（2026-10-28 重录：从访达拖入 500mb.csv → 3,266,000 行 → 滚动 → 一键分析出 5 张图，820×474、7.1 秒 89 帧、440 KB，见 docs/media/demo.gif；录制流程固化成 scripts/record-demo.sh）
 
 ## 4. 文档
 

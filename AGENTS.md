@@ -160,7 +160,8 @@ AIClient                协议适配、上下文构造、流式解析（旁路�
     ├── make-bench-data.sh       # 生成基准数据集
     ├── bench.sh                 # 跑性能基准并输出报告
     ├── bench-launch.py          # 冷启动计时，脚本自己拉起和退出应用
-    └── bench-record.py          # 跑基准并追加到 docs/bench-history.md
+    ├── bench-record.py          # 跑基准并追加到 docs/bench-history.md
+    └── record-demo.sh           # 整屏录一段，按窗口坐标裁成演示 GIF
 ```
 
 `TableWorkbench` 是模块名占位，产品名待定，见 R-DEC-06。
@@ -217,6 +218,9 @@ xcodebuild -scheme TableWorkbench -configuration Debug build
 
 # 冷启动（先装 release 包，脚本自己拉起和退出应用；开头会打系统负载）
 BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py --rounds 20
+
+# 录演示 GIF（倒计时结束后自己把动作做完，录完按窗口坐标裁；脚本只负责录与裁）
+./scripts/record-demo.sh --geometry "566,60,944,546" --seconds 7 --out docs/media/demo.gif
 ```
 
 一个需求算完成，要同时满足四条：

@@ -66,7 +66,7 @@ v0.1 的主要功能已经实现并在本机跑通：CSV/TSV/Parquet/xlsx 导入
 | 07-export.md | 4 | 已实现，导出范围新增选择框，验收框待同步 |
 | 08-performance.md | 7 | 七条全部完成；滚动帧耗时、点击延迟、缓存转换、内存、包体积与冷启动都有实测与脚本；500MB 冷打开中位 1.546 秒，冷启动 152 次中位 0.497 秒（预算 0.6 秒，p95 0.537）；基准记录改由 scripts/bench-record.py 追加并比对退化 |
 | 09-app-shell.md | 7 | 已实现；R-SHELL-02 菜单与 11 条快捷键实测通过，R-SHELL-04 关文件回空状态已真机验证，其余验收框待同步 |
-| 10-packaging-release.md | 6 | R-REL-03 已完成；dmg 15.8 MB 已出，README 第一屏三个数字齐；签名与公证缺账号 |
+| 10-packaging-release.md | 6 | R-REL-03 已完成；dmg 15.8 MB 已出，README 第一屏三个数字齐，GIF 已重录并把拖入放进前 3 秒；签名与公证缺账号 |
 | 11-milestones.md | 10 | 前置条件未就绪（Xcode） |
 | 12-decisions-risks.md | 20 | 3 项待拍板 |
 | 13-ai-analysis.md | 15 | 已定义，v0.2 |
