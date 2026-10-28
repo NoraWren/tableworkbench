@@ -191,6 +191,7 @@ public final class WorkspaceModel: ObservableObject {
                 selection = firstAdded
             }
             error = result.error
+            OpenTiming.mark("会话就绪")
             isLoading = false
         }
     }

@@ -135,7 +135,12 @@ public struct DataGridView: NSViewRepresentable {
         tableView.allowsMultipleSelection = true
         tableView.allowsColumnReordering = false
         tableView.columnAutoresizingStyle = .noColumnAutoresizing
+        // AppKit 在这行就会把行数记进内部结构。先让它按 0 行接上，等视图搭完再用
+        // reloadData 带进真实行数，省掉 300 万行在这里的一次性开销。
+        let realRowCount = context.coordinator.rowCount
+        context.coordinator.rowCount = 0
         tableView.dataSource = context.coordinator
+        context.coordinator.rowCount = realRowCount
         tableView.delegate = context.coordinator
         tableView.target = tableView
         tableView.doubleAction = #selector(GridTableView.activateRow(_:))
@@ -273,6 +278,10 @@ public struct DataGridView: NSViewRepresentable {
             column.minWidth = 60
             column.maxWidth = 420
             tableView.addTableColumn(column)
+        }
+        // 换完列紧接着的这一帧是用户第一次看见数据，用它作为打开耗时的收尾点。
+        if let grid = tableView as? GridTableView {
+            grid.awaitingFirstPaint = true
         }
         tableView.reloadData()
     }

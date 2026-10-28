@@ -1,4 +1,5 @@
 import AppKit
+import DuckDBKit
 
 public final class GridTableView: NSTableView {
     /// 双击行时回传行号，由外层决定怎么展示。
@@ -6,6 +7,18 @@ public final class GridTableView: NSTableView {
 
     /// 大范围复制的确认动作，默认弹系统对话框。测试里换成直接返回 true/false。
     public var confirmCopy: ((Int) -> Bool)?
+
+    /// 下一次绘制就是这份数据的第一帧，画完就把打开耗时那一段收尾。
+    /// 只在 TW_OPEN_TIMING 下有效，平时这个分支不会进。
+    public var awaitingFirstPaint = false
+
+    public override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if awaitingFirstPaint {
+            awaitingFirstPaint = false
+            OpenTiming.mark("表格首帧")
+        }
+    }
 
     @objc public func activateRow(_ sender: Any?) {
         let row = clickedRow

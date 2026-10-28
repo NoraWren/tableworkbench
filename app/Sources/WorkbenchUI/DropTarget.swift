@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import DuckDBKit
 
 /// 访达拖文件进窗口，由这一层接。
 ///
@@ -73,6 +74,9 @@ public final class FileDropContainerView: NSView {
         setHighlighted(false)
         let dropped = urls(from: info)
         guard !dropped.isEmpty else { return false }
+        // 松手就是 R-IMP-01 的计时起点，后面的打点都以这一刻为零。
+        OpenTiming.restart()
+        OpenTiming.mark("松手 \(dropped.count) 个文件")
         box.handle(dropped)
         return true
     }

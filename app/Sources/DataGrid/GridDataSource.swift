@@ -19,6 +19,8 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
 
     private let cache = BlockCache(capacity: 8)
     private let cellIdentifier = NSUserInterfaceItemIdentifier("data-cell")
+    /// 首块只打一次点，后面滚出来的块不重复记。
+    private var markedFirstBlock = false
     /// 查失败的块记下来，别让同一块的每个单元格各跑一遍同样的坏查询。
     private var failedBlocks: Set<Int> = []
 
@@ -125,6 +127,10 @@ public final class GridDataSource: NSObject, NSTableViewDataSource, NSTableViewD
         do {
             let block = try provider(blockIndex * blockSize, blockSize)
             cache.insert(block, for: blockIndex)
+            if !markedFirstBlock {
+                markedFirstBlock = true
+                OpenTiming.mark("首块 \(block.rows.count) 行")
+            }
             return block
         } catch {
             failedBlocks.insert(blockIndex)

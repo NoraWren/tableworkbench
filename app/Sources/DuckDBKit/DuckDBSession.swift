@@ -83,13 +83,8 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
 
     private static func open(source: Source) throws -> DuckDBSession {
         do {
-            let reportTiming = ProcessInfo.processInfo.environment["TW_OPEN_TIMING"] != nil
-            let phaseStart = Foundation.Date()
-            func mark(_ label: String) {
-                guard reportTiming else { return }
-                let elapsed = Foundation.Date().timeIntervalSince(phaseStart)
-                FileHandle.standardError.write(Data(String(format: "[open] %@ %.3f 秒\n", label, elapsed).utf8))
-            }
+            // 计时起点在 OpenTiming 里：拖放路径由松手那一刻算起，其他路径由进程启动算起。
+            let mark = OpenTiming.mark
             let fileManager = FileManager.default
             let importLimit = importMemoryLimit(for: source)
             let temporaryDirectory = fileManager.temporaryDirectory.appendingPathComponent("tableworkbench-\(UUID().uuidString)", isDirectory: true)
@@ -1006,7 +1001,14 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
         let upperBound = safeOffset + safeSize
         // __result 是物化表，用 rowid；只有直接查 Parquet 视图时才用 __rid。
         let order = hasResultTable ? "rowid" : orderColumn
-        let sql = "SELECT \(selectList) FROM \(table) WHERE \(order) >= \(safeOffset) AND \(order) < \(upperBound) ORDER BY \(order)"
+        let sql: String
+        if order == "rowid" {
+            // 物化表按插入序返回（DuckDB 默认 preserve_insertion_order），浅层取块用
+            // LIMIT/OFFSET 能直接停在所需行，不必像虚拟 rowid 那样为了过滤把整表扫一遍。
+            sql = "SELECT \(selectList) FROM \(table) LIMIT \(safeSize) OFFSET \(safeOffset)"
+        } else {
+            sql = "SELECT \(selectList) FROM \(table) WHERE \(order) >= \(safeOffset) AND \(order) < \(upperBound) ORDER BY \(order)"
+        }
 
         do {
             let result = try connection.query(sql)

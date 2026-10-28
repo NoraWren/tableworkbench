@@ -275,6 +275,19 @@
 - 推翻条件：如果将来必须在 iCloud 里构建（比如云盘协作），那就不是换参数的问题，得换仓库位置。
 - 依赖：R-MS-01
 
+## R-DEC-22 首屏取块改用 LIMIT/OFFSET，NSTableView 不按 300 万行接数据源
+
+- 优先级：P0
+- 状态：已定（2026-10-28）
+- 事实：R-IMP-01 第一条验收是「拖入 500MB CSV，从松手到表格可滚动不超过 2 秒」。用应用内打点（TW_OPEN_TIMING）量 release 冷开，改前 2.54 秒，拆成四段：read_csv_auto 物化 __base 1.57–1.82 秒、网格视图搭建 0.65 秒、首块取数 0.03 秒、首帧绘制 0.21 秒。之前记的 2.8–2.9 秒是 debug 产物，不能当基线。
+- 两处开销的来源：一是取块 SQL 用虚拟 rowid 过滤（WHERE rowid >= a AND rowid < b），DuckDB 用不上统计信息，每取一块都把 326 万行扫一遍，实测 0.40 秒；二是给 NSTableView 设 dataSource 时它按 numberOfRows 把 326 万行记进内部结构，0.57 秒。
+- 落地：物化表取块改成 LIMIT size OFFSET offset（第 1 / 100 / 200 块 0.03 / 0.09 / 0.14 秒），顺序靠 preserve_insertion_order 与 __result 的插入序；Parquet 视图那条路不动，仍按 __rid 过滤。网格改成先按 0 行接上 dataSource，视图搭完再 reloadData 带真实行数。五次冷开中位 1.912 秒（1.871–2.148），滚动回归 300 帧 p95 1.34 ms、超预算帧 0。
+- 代价：取块顺序依赖插入序而不是显式 ORDER BY。preserve_insertion_order 在 DuckDB 里默认开着，但它是会话级开关，将来有人关掉它，行序会散，取块 SQL 的注释要与这条记录一起看。
+- 被否决：给 __base 加一列 row_number() OVER () AS __rid 靠 row group 裁剪（物化从 1.6 秒涨到 5.2 秒，取块没变快）；保留导入期 1.4 GB 上限不收回（取块时间不变）；把缓存转换延后（时间不变，不是它抢的 CPU）。
+- 没做到：最慢那轮 2.148 秒仍超预算，超在 CSV 解析本身；缓存命中的 Parquet 视图首块仍是 0.7 秒。两件都留给下一轮，README 不许写成「已经 1.5 秒」。
+- 推翻条件：DuckDB 将来给 rowid 加上裁剪，或者改成先建视图、首屏只查前 5000 行、行数后台再补。
+- 依赖：R-PERF-01、R-IMP-01、R-GRID-02
+
 ## 风险清单
 
 | 编号 | 风险 | 概率 | 影响 | 应对 |
