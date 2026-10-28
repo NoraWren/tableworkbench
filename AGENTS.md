@@ -188,14 +188,14 @@ AIClient                协议适配、上下文构造、流式解析（旁路�
 ## 9. 验收与运行
 
 ```
-# 构建（Command Line Tools 即可）
-cd app && swift build
+# 构建（两个参数缺一不可：产物必须在 iCloud 之外，原因见 10 节）
+cd app && swift build --build-system native --scratch-path ~/Library/Caches/tableworkbench-build
 
-# 测试（当前用仓库内的测试可执行程序，原因见 10 节）
-cd app && swift run TableWorkbenchTests
+# 测试（当前用仓库内的测试可执行程序；XCTest 与 Swift Testing 已可用，迁移留到发布后）
+cd app && swift run --build-system native --scratch-path ~/Library/Caches/tableworkbench-build TableWorkbenchTests
 
 # 启动应用（开发期直接跑可执行文件）
-cd app && swift run TableWorkbench
+cd app && swift run --build-system native --scratch-path ~/Library/Caches/tableworkbench-build TableWorkbench
 
 # 组装开发用 .app（macOS 14 之后未打包的进程无法可靠激活）
 ./scripts/make-app-bundle.sh
@@ -205,8 +205,8 @@ open -a build/TableWorkbench.app file1.csv file2.csv
 # 打包 dmg（没有签名证书时是 ad-hoc，Gatekeeper 会拦）
 ./scripts/make-dmg.sh
 
-# 完整构建（需要 Xcode）
-xcodebuild -scheme TableWorkbench -configuration Debug build
+# 用 Xcode 打开（没有 .xcodeproj，工程就是 SPM 包；宏与 Preview 在这个环境里才生效）
+open app/Package.swift
 
 # 性能基准（M1 之后必须有）
 ./scripts/make-bench-data.sh && ./scripts/bench.sh
