@@ -10,7 +10,7 @@ TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx file
 
 | 指标 | 实测 |
 |---|---|
-| 打开速度：500MB CSV 首次打开（无缓存） | 1.5–1.9 秒（八次中位 1.55 秒） |
+| 打开速度：500MB CSV 拖进窗口到能滚（无缓存） | 1.87–2.15 秒（五次中位 1.91 秒） |
 | 包体积：dmg / 解压后的 app | 15 MB / 53 MB |
 | 冷启动：双击到窗口出现 | 0.50 秒（152 次中位 0.497 秒） |
 
