@@ -2,6 +2,11 @@ import Foundation
 import DuckDBKit
 import Features
 
+/// 中断检查用的跨线程小盒子。
+final class InterruptBox: @unchecked Sendable {
+    var outcome: String = "（没跑完）"
+}
+
 struct BenchResult: Encodable {
     let file: String
     let bytes: Int
@@ -29,6 +34,34 @@ guard arguments.count >= 2 else {
 }
 
 let url = URL(fileURLWithPath: arguments[1])
+// 中断检查：跑一条千万行物化，中途打断，看返回速度、错误形态与中断后连接是否可用。
+// 界面上的取消最终就是这一条路径，先在这里把会话层的行为钉死。
+if arguments.count >= 3, arguments[1] == "--interrupt-check" {
+    let probeURL = URL(fileURLWithPath: arguments[2])
+    let opened = try FileImporter.open(url: probeURL)
+    let session = opened.session
+    let box = InterruptBox()
+    let done = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async {
+        do {
+            try session.apply(view: QueryView(sort: [SortSpec(column: "金额", ascending: true)]))
+            box.outcome = "没被打断，完成 \(session.resultCount) 行"
+        } catch {
+            box.outcome = "被中断：\(String(describing: error).prefix(120))"
+        }
+        done.signal()
+    }
+    Thread.sleep(forTimeInterval: 1.0)
+    let started = Date()
+    session.interrupt()
+    let signalled = done.wait(timeout: .now() + 15)
+    print(String(format: "发出中断后 %.2f 秒返回（信号=%@）", Date().timeIntervalSince(started), signalled == .success ? "有" : "无"))
+    print(box.outcome)
+    let followUp = try? session.runSQL("SELECT count(*) FROM data")
+    print("中断后连接还能用：\(followUp?.rows.first?.first ?? "拿不到结果")")
+    exit(0)
+}
+
 let asJSON = arguments.contains("--json")
 
 var sortColumn: String?

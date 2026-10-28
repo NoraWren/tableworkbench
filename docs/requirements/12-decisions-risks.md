@@ -321,6 +321,7 @@
 - 落地：在 `git.ideatech.info/opensource/duckdb-swift` 建私有分支，内容就是 1.1.3 加三行 `Connection.interrupt()`，打 `1.1.3` 标签；`app/Package.swift` 的依赖指过去，版本仍 `exact: 1.1.3`。应用侧 `QuerySession.interrupt()` 接到 `DuckDBSession`，用独立句柄转发（不拿会话锁，否则等于排队等它跑完）；菜单「取消」从禁用占位改成真动作。
 - 实测：10m.parquet 上触发千万行物化，运行中点「取消」，物化没有再出现完成打点，界面 1 秒内回到空闲——中断本身有效。
 - 没解决：菜单可用性晚一拍。`canCancel` 跟着 `isQuerying` 刷新，刚点完列头 1 秒内去点「取消」，那一击可能落在还禁用的菜单项上被丢掉。端到端复现不稳定，验收没勾。
+ - 追加（同日，会话层实测）：`TableWorkbenchBench --interrupt-check bench-data/10m.parquet` 起一条千万行排序、1 秒后中断，0.42 秒返回，错误是 `connectionQueryError`，中断后同一条连接仍能 `count(*)`。0.42 秒比 R-SQL-01 的 200 毫秒预算慢一倍，中断按 DuckDB 的检查粒度生效，压不下去；界面层的取消改成状态栏常驻「停止」按钮，绕开菜单可用性的时延，但仍未在自动化里端到端复现。
 - 代价：依赖不再指向上游原仓，包里多一份 C++ 源码要跟着升级维护；上游将来补了这个接口就该切回去。
 - 推翻条件：duckdb-swift 上游合入 `interrupt()`，或者我们放弃取消这个能力。
 - 依赖：R-SQL-01、R-EXP-02、R-GRID-04
