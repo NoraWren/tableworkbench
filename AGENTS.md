@@ -237,6 +237,7 @@ BUILD_CONFIG=release ./scripts/make-app-bundle.sh && ./scripts/bench-launch.py -
 - **不要为了快而跳过基准。** 这个项目的全部叙事建在三个数字上，数字虚了，项目就没了。
 - **构建目录不能放在 iCloud 里。** 仓库在 ~/Documents 下，fileprovider 会给产物打上 FinderInfo 与 `com.apple.fileprovider.fpfs#P` 扩展属性。默认的 SwiftBuild 后端给资源包签名时直接失败（`resource fork, Finder information, or similar detritus not allowed`），换 native 后端则会在编译完之后空转、停在 CodeSigningHelper 不动。把 scratch 目录挪到 `~/Library/Caches/tableworkbench-build` 之后，release 全量能编完。脚本里已经这么设了（`TW_BUILD_DIR` 可覆盖）。
 - **`--build-system native` 已被标弃用。** 现在必须带，原生后端不签资源包。将来 SwiftPM 真删了这个开关，正解是把仓库移出 iCloud，而不是继续加别的绕法。
+ **换过构建目录之后要清 ModuleCache。** scratch 里的 `ModuleCache` 记着上次编译时的绝对路径。如果同一份 scratch 早先用别的路径构建过（例如用 `TW_BUILD_DIR` 临时换过目录），release 会直接报 `precompiled file ... was compiled with module cache path ...` 加 `missing required module 'SwiftShims'`，看着像工具坏了，其实是缓存串了。清掉 `<scratch>/arm64-apple-macosx/*/ModuleCache` 就能编，代价是 DuckDB 的 C++ 部分要重编一遍（十几分钟）。
 - **手跑 swift 命令也要带这两个参数。** `swift build --build-system native --scratch-path ~/Library/Caches/tableworkbench-build`。漏掉 scratch 就会在 iCloud 里重建 .build，重新踩上面那个坑。
 - **`git status` 有时会卡住。** 它要刷新索引并拿 .git/index 的锁，fileprovider 正好在同步这个目录时就一直等。急用时加 `git --no-optional-locks`，查询类命令（log/rev-parse/diff）都不受影响。
 - **拉 duckdb-swift 要走代理。** 本机系统代理是 127.0.0.1:7897，git 默认不走，首次 resolve 需要设置 HTTPS_PROXY 和 HTTP_PROXY。

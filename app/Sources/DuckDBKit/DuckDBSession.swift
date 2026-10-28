@@ -9,6 +9,10 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public private(set) var generation: Int = 0
     /// 行数 × 列数超过这个值就保留 Parquet 视图，否则物化。测试里会调小来覆盖视图分支。
     public static var parquetViewCellThreshold = 20_000_000
+
+    /// 设 TW_LOG_BLOCK_SQL 后把每次取块用的 SQL 打到标准错误。
+    /// R-GRID-02 的「首次显示只查一次块，SQL 里能看到 LIMIT 5000」靠它留证。
+    static let logsBlockSQL = ProcessInfo.processInfo.environment["TW_LOG_BLOCK_SQL"] != nil
     /// 文本列类型冲突检查的抽样门槛，非空行超过它就只扫前这么多行。测试里会调小来覆盖抽样分支。
     public static var textProbeSampleThreshold = 200_000
     /// 平时的工作上限。导入期会临时抬高，物化完立刻收回这个值。
@@ -1008,6 +1012,9 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
             sql = "SELECT \(selectList) FROM \(table) LIMIT \(safeSize) OFFSET \(safeOffset)"
         } else {
             sql = "SELECT \(selectList) FROM \(table) WHERE \(order) >= \(safeOffset) AND \(order) < \(upperBound) ORDER BY \(order)"
+        }
+        if DuckDBSession.logsBlockSQL {
+            OpenTiming.append("[block] \(sql)\n")
         }
 
         do {

@@ -34,7 +34,11 @@ public enum OpenTiming {
         lock.lock()
         let elapsed = Date().timeIntervalSince(start)
         lock.unlock()
-        let line = String(format: "[open] %@ +%.3f 秒\n", label, elapsed)
+        append(String(format: "[open] %@ +%.3f 秒\n", label, elapsed))
+    }
+
+    /// 往同一个出口追加一行原文，不加时间戳。取块 SQL 这类要留证的内容走这里。
+    public static func append(_ line: String) {
         FileHandle.standardError.write(Data(line.utf8))
         guard let sinkURL else { return }
         if let handle = try? FileHandle(forWritingTo: sinkURL) {

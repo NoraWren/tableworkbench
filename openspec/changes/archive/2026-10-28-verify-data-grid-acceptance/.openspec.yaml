@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-28
+skip_specs: true
+reason: 这轮只加一个调试开关并补验收记录，没有外部可见行为变化，不产生规格增量。
