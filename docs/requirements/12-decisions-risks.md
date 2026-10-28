@@ -309,6 +309,7 @@
 - 代价：排序期间界面上是「5000 行的预览」，滚动条长度、总行数、导出都还是旧的或未知。状态栏必须写清楚，否则用户会以为排序只出 5000 行。
 - 没做到：完整结果的 12.9 秒没变（甚至还多 0.6 秒视图重建）。再快要么换列存排序，要么做增量衔接，都不在这轮。
  - 追加（同日）：连点列头改成「只保留最后一次」。同一条目同时只有一个 worker 在物化，新请求只覆盖待办槽位，中间那些直接被丢掉——千万行上快速点 4 次，落地物化 2 次。在跑的那次仍停不下来：`duckdb_interrupt` 在 duckdb-swift 的 `Cduckdb` target 里，那个 target 不在产品导出范围，应用侧拿不到。
+ - 追加二（同日，做了实验）：想绕过上游直接拿到中断能力，两条路都堵死。`import Cduckdb` 编不过（包只导出 `DuckDB` 一个产品）；`dlsym` 能找 `duckdb_interrupt` 符号，但 `Connection.ptr` 的运行时类型是 `UnsafeMutablePointer<Optional<UnsafeMutablePointer<_duckdb_connection>>>`，`_duckdb_connection` 是不可命名的 opaque 类型，应用模块写不出来，Mirror 取到值也转不过去。结论写进 `docs/upstream/duckdb-swift-interrupt.md`，附了要提给上游的三行补丁。在那之前产品里不做假取消。
 - 推翻条件：如果 DuckDB 支持「从已排序结果继续取」或者内存能整表放下，预览这套中间态就可以去掉。
 - 依赖：R-GRID-04、R-GRID-05、R-DEC-23
 
