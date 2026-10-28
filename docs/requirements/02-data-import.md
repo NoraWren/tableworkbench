@@ -130,7 +130,7 @@
 ## R-IMP-08 拖放接收层
 
 - 优先级：P0
-- 状态：已实现（2026-10-27），真机鼠标拖拽待人工确认
+- 状态：已实现并真机验证（2026-10-27 改到窗口层，同日真机从访达拖拽成功）
 - 为什么单独记一条：入口 1 长期不通，2026-10-26 录 GIF 时发现访达拖拽触发不了，修法改了架构位置，值得留档。
 - 根因：SwiftUI 的 `.dropDestination(for: URL.self)` 挂在 `NavigationSplitView` 上时，生成的拖放目标视图是分栏视图的**兄弟节点**。AppKit 投递拖放先 `hitTest` 找最深的视图，再沿父链往上找 `registeredDraggedTypes` 匹配的那个；兄弟链不在父链上，拖拽落不到它身上。
 - 修法：窗口内容视图换成自绘的 `FileDropContainerView`（`DropTarget.swift`），注册 `public.file-url`，原 SwiftUI 视图整个装在里面。这样任意位置的父链都能走回接收器，`NSTableView` 也抢不走。
@@ -138,5 +138,6 @@
 - 只接本地文件：剪贴板用 `urlReadingFileURLsOnly` 读，纯文字、网页图片一律返回不接收，不弹提示。
 - 悬停高亮：拖入时给容器 layer 描 3pt 强调色边框，松手或移出撤掉，不进布局。
 - 验证：`TableWorkbenchTests` 造真 `NSWindow`，断言 contentView 是容器、注册了 `.fileURL`、铺满内容区、只一层、重复安装不叠层；再用假 `NSDraggingInfo` 按 AppKit 顺序走完 `draggingEntered` → `draggingUpdated` → `prepareForDragOperation` → `performDragOperation`，断言 URL 交到处理函数；换成纯文字断言全部拒绝。`TW_DROP_PROBE=1 TableWorkbenchUIAudit` 打印注册视图与覆盖面积（1200×828 = 100%）。
-- 证据：悬停高亮态离屏截图 [drop-window-highlight.png](../media/verification/drop-window-highlight.png)（真实视图树，模拟文件悬停，边框 3pt）。工具栏窗口换 contentView 前后内容区都是 900×628，toolbar 没丢。
-- 没证明的：系统真把访达的拖拽会话送进来这一步，测试进程造不出 X 事件，只能真机鼠标拖一次。
+- 证据：离屏悬停高亮 [drop-window-highlight.png](../media/verification/drop-window-highlight.png)（真实视图树，模拟文件悬停，边框 3pt）；工具栏窗口换 contentView 前后内容区都是 900×628，toolbar 没丢。
+- 真机验证（2026-10-27 23:29，release 包）：从访达把 bench-data/wide-100k.csv 鼠标拖进主窗口，悬停时窗口内描边亮起 [drop-real-hover.png](../media/verification/drop-real-hover.png)，松开后 100,000 行、15.7 MB、UTF-8 直接进表 [drop-real-loaded.png](../media/verification/drop-real-loaded.png)；同法再拖 bench-data/500mb.csv（524.4 MB）得到 3,266,000 行 [drop-real-500mb.png](../media/verification/drop-real-500mb.png)。系统真把访达的拖拽会话送到接收器这一步，此前是整条链上唯一没验的环节，这一轮补齐。
+- 没证明的：一次拖多个文件只按第一个打开，多文件批量导入没做也没验；跨卷、网络盘、外接盘上的文件拖入未验；从访达以外的应用（浏览器下载列表、解压工具窗口）拖入未验。
