@@ -22,6 +22,14 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
     public static let importMemoryLimitBytes = 1_400_000_000
     /// 文件小于这个尺寸时，物化用不到导入上限，保持原样。
     public static let importMemoryLimitFileThreshold = 64 * 1024 * 1024
+    /// 排序与筛选要把结果整表物化，这一段的工作集比导入期还大：1012 万行 × 20 列排序
+    /// 用常驻的 1200MB 会一路落盘，实测 24.7 秒；给到 4 GB 之后 7 秒上下。
+    /// 取物理内存的一半与 4 GB 的较小值，内存小的机器不至于被压到交换。
+    public static var materializeMemoryLimit: String = {
+        let halfOfRAM = ProcessInfo.processInfo.physicalMemory / 2
+        let cap = min(halfOfRAM, 4 * 1024 * 1024 * 1024)
+        return "\(max(1_200_000_000, cap))B"
+    }()
     private var view: QueryView = .empty
     private var hasResultTable = false
     private var computedColumns: [(name: String, expression: String)] = []
@@ -225,10 +233,18 @@ public final class DuckDBSession: QuerySession, @unchecked Sendable {
                 CREATE TEMP TABLE "__result" AS
                 SELECT \(columnsSQL) FROM (\(inner)) AS t
                 """
+                // 排序与筛选的结果集整表物化，工作集是这一路最贵的地方：临时借一个更高的
+                // 内存上限，建完立刻收回常驻值，别让这笔开销跟着应用一直占着。
+                try? connection.execute("SET memory_limit='\(DuckDBSession.materializeMemoryLimit)'")
+                defer { try? connection.execute("SET memory_limit='\(DuckDBSession.residentMemoryLimit)'") }
+                // 排序与筛选要把结果整表物化，这一段是千万行上最贵的操作，单独打点。
+                OpenTiming.mark("物化 __result 开始")
                 try connection.execute(createResult)
+                OpenTiming.mark("物化 __result 完")
                 hasResultTable = true
                 let counted = try connection.query("SELECT count(*) FROM \"__result\"")
                 resultCount = Int(counted.column(at: 0).cast(to: Int64.self)[0] ?? 0)
+                OpenTiming.mark("__result 计数 完")
             }
             self.view = view
             generation += 1
