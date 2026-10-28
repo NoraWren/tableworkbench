@@ -39,13 +39,34 @@ public struct ImportErrorCard: View {
             }
 
             if let detail = error.technicalDetail, !detail.isEmpty {
-                DisclosureGroup("查看技术细节", isExpanded: $state.showDetail) {
-                    Text(detail)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                // 自己拼展开行：DisclosureGroup 只认小箭头那一小块，点"查看技术细节"这几个字没反应。
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        state.showDetail.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: state.showDetail ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text("查看技术细节")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(state.showDetail ? "收起技术细节" : "查看技术细节")
+
+                    if state.showDetail {
+                        // 短报错按内容高度显示；超过 8 行才换成滚动，别把卡片顶出窗口。
+                        let lines = detail.split(separator: "\n", omittingEmptySubsequences: false).count
+                        if lines > 8 {
+                            ScrollView { detailText(detail) }
+                                .frame(height: 120)
+                        } else {
+                            detailText(detail)
+                        }
+                    }
                 }
-                .font(.caption)
             }
         }
         .padding(14)
@@ -53,5 +74,12 @@ public struct ImportErrorCard: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.orange.opacity(0.35)))
         .shadow(radius: 8, y: 2)
         .padding()
+    }
+
+    private func detailText(_ detail: String) -> some View {
+        Text(detail)
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

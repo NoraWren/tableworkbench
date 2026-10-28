@@ -308,6 +308,7 @@ struct ContentView: View {
                     model.dismissError()
                 }
                 .frame(maxWidth: 620)
+                .padding(.bottom, 8)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
