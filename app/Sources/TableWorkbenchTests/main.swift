@@ -316,6 +316,17 @@ func run() throws {
     // SQL 抽屉
     let countResult = try query.session.runSQL("SELECT count(*) FROM data")
     check("SQL 返回总行数", countResult.rows.first?.first == "6")
+
+    // 有选区时只跑选区（R-SQL-01）：编辑器把选中文字放进共享槽位，运行命令读它
+    let selectionCoordinator = SQLTextView.Coordinator(text: .constant(""))
+    let selectionView = NSTextView()
+    selectionView.string = "SELECT 1\nSELECT 2"
+    selectionView.setSelectedRange(NSRange(location: 0, length: 8))
+    selectionCoordinator.textViewDidChangeSelection(Notification(name: NSText.didChangeNotification, object: selectionView))
+    check("选中一段时槽位里是这段", SQLSelectionBus.selectedText == "SELECT 1")
+    selectionView.setSelectedRange(NSRange(location: 3, length: 0))
+    selectionCoordinator.textViewDidChangeSelection(Notification(name: NSText.didChangeNotification, object: selectionView))
+    check("没有选区时槽位清空", SQLSelectionBus.selectedText.isEmpty)
     check("SQL 列数 1", countResult.columns.count == 1)
 
     let sortedSQL = try query.session.runSQL("SELECT name, amount FROM data ORDER BY amount DESC")

@@ -792,6 +792,20 @@ MenuBarClientCore 也在这期间做软链接加载。看得出来这是系统�
 - 应用代码这一轮一行没改，构建产物与上一轮一致，包体积仍是 15 MB / 53 MB。
 - `/tmp/minapp`（70 KB 对照应用）与 `/tmp/tw_stripped` 是实验产物，不在仓库里。
 
+## SQL 抽屉在千万行上的耗时（2026-10-28）
+
+R-SQL-01 要求「执行 1000 万行的 GROUP BY，结果在 2 秒内出现」。10m.parquet（1012 万行 × 20 列）上跑 `TableWorkbenchBench --sql`，口径是 `runSQL` 记录的耗时（含 DESCRIBE 与结果读取）：
+
+| 语句 | 结果行数 | 耗时 |
+|---|---|---|
+| `SELECT 城市, count(*), sum(金额) FROM data GROUP BY 城市` | 8 | 0.075 s |
+| `SELECT 区域, 渠道, count(*) FROM data GROUP BY 区域, 渠道` | 20 | 0.065 s |
+| `SELECT count(*), sum(金额) FROM data` | 1 | 0.020 s |
+
+千万行的聚合在 DuckDB 里就是几十毫秒量级，2 秒预算有很大余量。界面不冻结是因为 `runSQL` 在 `Task.detached` 里执行，主线程只负责最后贴结果。
+
+「点取消后 200 毫秒内回到可编辑状态」这条做不到：菜单里的「取消」是禁用占位，`duckdb_interrupt` 在 duckdb-swift 的包内 target（Cduckdb）里，而那个包只导出 DuckDB 一个产品，应用侧拿不到中断接口。同 R-DEC-24 记的是同一件事。
+
 ## 大表排序先出首屏（2026-10-28）
 
 上一节把千万行排序从 24.69 秒压到 5–8 秒之后，剩下的时间是排序本身，参数调不动了。但用户真正等的是「看见排好序的第一屏」：`ORDER BY ... LIMIT 5000` 走的是堆式 top-N，不用把整表排完。

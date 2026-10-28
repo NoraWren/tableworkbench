@@ -5,6 +5,7 @@ import Features
 import DataGrid
 import DuckDBKit
 import ChartUI
+import SQLEditorUI
 
 private final class ComputedColumnState: ObservableObject {
     @Published var name = ""
@@ -350,7 +351,9 @@ struct ContentView: View {
         bus.closeFile = { model.closeSelected() }
         bus.runSQL = {
             if let entry = model.selectedEntry {
-                model.runSQL(entryID: entry.id, sql: sql.text)
+                // 有选区只跑选区，没有就整篇。R-SQL-01 的第一条验收。
+                let selection = SQLSelectionBus.selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+                model.runSQL(entryID: entry.id, sql: selection.isEmpty ? sql.text : selection)
             }
         }
         bus.newQuery = {

@@ -5,6 +5,13 @@ import Features
 
 /// SQL 编辑器。AppKit 的 NSTextView 才能拿到光标位置、拦 Tab 和回车，SwiftUI 的 TextEditor 两者都做不到。
 /// 补全候选来自当前会话的表与列，逻辑在 SQLCompletion，这里只管弹窗和按键。
+/// 编辑器当前选中的文本。运行命令挂在 AppKit 菜单上，拿不到 SwiftUI 的编辑器状态，
+/// 所以由编辑器在选区变化时把这段文字放进这里，命令读它决定跑选区还是全文。
+/// v0.1 只有单窗口单编辑器，用共享槽位就够；将来多窗口要改成按窗口隔离。
+public enum SQLSelectionBus {
+    public static var selectedText: String = ""
+}
+
 public struct SQLTextView: NSViewRepresentable {
     @Binding var text: String
     let columns: [String]
@@ -76,9 +83,26 @@ public struct SQLTextView: NSViewRepresentable {
         public func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
+            recordSelection(from: textView)
             if let typed = textView as? CompletionTextView {
                 typed.refreshCompletion()
             }
+        }
+
+        public func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            recordSelection(from: textView)
+        }
+
+        /// 选区为空时清掉，运行命令才能明确区分「整篇」和「选中的一段」。
+        private func recordSelection(from textView: NSTextView) {
+            let range = textView.selectedRange()
+            let full = textView.string as NSString
+            guard range.length > 0, NSMaxRange(range) <= full.length else {
+                SQLSelectionBus.selectedText = ""
+                return
+            }
+            SQLSelectionBus.selectedText = full.substring(with: range)
         }
 
         // MARK: - SQLCompletionSource
