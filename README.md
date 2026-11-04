@@ -1,5 +1,7 @@
 # 本地表格工作台（暂名）
 
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 TableWorkbench is a native macOS app for opening huge CSV, Parquet and xlsx files in under two seconds. Built with SwiftUI and DuckDB; your data never leaves the machine.
 
 拖进一个 500MB 的 CSV，一点几秒打开，三百多万行也能滚动，数据不出本机。
@@ -81,7 +83,9 @@ Excel 打开这种规模的文件要等好几分钟，滚动时还要反复重�
 
 ## 许可证
 
-Apache License 2.0，见 [LICENSE](LICENSE)。第三方依赖的许可证登记在 [docs/third-party.md](docs/third-party.md)。
+Apache License 2.0，见 [LICENSE](LICENSE)；著作权归 Kong Qi，见 [NOTICE](NOTICE)。
+
+这个许可证除了允许商用、修改和再分发，还带一条明确的专利授权，公司把代码放进内部流程时不用担心专利纠纷。改过的文件要保留声明，分发二进制时附上 LICENSE 与 NOTICE——打包脚本已经把这两份放进 app 的 Resources。第三方依赖的许可证登记在 [docs/third-party.md](docs/third-party.md)。
 
 ## 参与
 

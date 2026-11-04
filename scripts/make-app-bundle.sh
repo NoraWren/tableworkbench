@@ -22,6 +22,9 @@ mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$bin" "$bundle/Contents/MacOS/TableWorkbench"
 cp "$root/app/Resources/Info.plist" "$bundle/Contents/Info.plist"
 cp "$root/app/Resources/AppIcon.icns" "$bundle/Contents/Resources/AppIcon.icns"
+# Apache-2.0 第 4 条要求分发二进制时附上许可证与 NOTICE，打包时一并放进资源目录。
+cp "$root/LICENSE" "$bundle/Contents/Resources/LICENSE"
+cp "$root/NOTICE" "$bundle/Contents/Resources/NOTICE"
 
 codesign --force --deep --sign - "$bundle" >/dev/null 2>&1 || true
 echo "$bundle"

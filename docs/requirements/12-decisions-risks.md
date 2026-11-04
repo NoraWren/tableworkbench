@@ -105,6 +105,8 @@
 - 状态：许可证已定 Apache-2.0，LICENSE 与 NOTICE 已入库；开源主体待确认
 - 建议：以公司名义开源，许可证用 Apache-2.0。
 - 理由：Apache-2.0 比 MIT 多一条明确的专利授权，对公司合作方更友好；同时保留将来做商业版的空间。
+- 已落地（2026-11-02）：LICENSE 是 Apache-2.0 原文，NOTICE 写明 Copyright 2026 Kong Qi 与四个第三方依赖；关于页与 Info.plist 的 NSHumanReadableCopyright 都写 Apache-2.0；make-app-bundle.sh 把 LICENSE 与 NOTICE 放进 app 的 Resources，分发二进制时随包带上。四个依赖的 LICENSE 文件逐个核对过，见 docs/third-party.md。
+- 仍然待定：NOTICE 与 Info.plist 里的著作权人写的是个人名，换成公司主体时改这两处，LICENSE 正文不动。
 - 需要确认：职务作品的著作权归属是否已有制度文件；对外开源是否需要内部审批。
 - 影响：许可证决定后写进 LICENSE，并且要在发布前定，不能事后改。
 

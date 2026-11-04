@@ -6,7 +6,7 @@
 
 ## 1. Parquet 从哪来
 
-本机没有 `duckdb` 命令行，python 默认环境和 ideatech 环境都没装 duckdb 包。可选的路有三条：
+本机没有 `duckdb` 命令行，两套 python 环境都没装 duckdb 包。可选的路有三条：
 
 | 方案 | 问题 |
 |---|---|

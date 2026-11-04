@@ -68,15 +68,16 @@
 ## R-REL-05 开源与合规
 
 - 优先级：P0
-- 状态：已定义
+- 状态：部分完成（许可证已落地，开源主体与历史审查待确认）
 - 行为：
-  - 许可证待定，见 R-DEC-07。
+  - 许可证 Apache-2.0，见 R-DEC-07；LICENSE 与 NOTICE 在仓库根目录，打出的应用包 Resources 里各带一份。
+  - 关于页与 Info.plist 的 NSHumanReadableCopyright 写明许可证与著作权人。
   - 引入的第三方依赖逐条列在 docs/third-party.md，写清名称、版本、许可证、用途。
   - README 里不出现任何从其他项目搬来的文案、截图、示例数据。
   - 公司代码一行都不搬进来，业务口径也不搬。
 - 验收：
-  - [ ] 每个依赖的许可证都是 MIT、Apache-2.0 或 BSD 之一
-  - [ ] docs/third-party.md 的条目与 Package.resolved 一致
+  - [x] 每个依赖的许可证都是 MIT、Apache-2.0 或 BSD 之一（2026-11-02 逐个打开 checkouts 里的 LICENSE 核对）
+  - [x] docs/third-party.md 的条目与 Package.resolved 一致
   - [ ] 仓库历史里没有公司内部代码的痕迹
 - 边界：不做 CLA 流程，v0.1 用 DCO 签名即可。
 - 依赖：R-DEC-07

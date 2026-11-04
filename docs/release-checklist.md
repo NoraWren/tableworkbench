@@ -4,7 +4,7 @@
 
 - 产品英文名（GitHub 仓库名、包名）：暂用 TableWorkbench
 - Bundle ID：dev.kongqi.tableworkbench，改域名时同步 Info.plist
-- 开源许可证：Apache-2.0，LICENSE 与 NOTICE 已放入仓库
+- 开源许可证：Apache-2.0。LICENSE 与 NOTICE 在仓库根目录，make-app-bundle.sh 会把两份一起放进 app 的 Resources；关于页与 Info.plist 都已写明
 - 著作权归属与对外发布审批：仍需确认
 
 ## 签名与公证

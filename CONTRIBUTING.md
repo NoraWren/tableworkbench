@@ -60,6 +60,12 @@ swift run TableWorkbenchTests
 
 沿用 `type: 中文描述`，例如 `fix: 图表面板记住上次选择`。type 用 feat、fix、perf、docs、chore、refactor。
 
+## 许可证与 DCO
+
+代码按 Apache License 2.0 发布。提交时用 `git commit -s` 加一行 Signed-off-by，表示你有权按这个许可证提交这份代码；忘了加的可以 `git commit --amend -s` 补上。v0.1 不要求签 CLA。
+
+新增源文件建议在文件头写一行 `// SPDX-License-Identifier: Apache-2.0`，方便工具识别，不写也不影响合入。
+
 ## 边界
 
 这个项目是分析器。单元格编辑、公式、仪表盘联动、协作、云同步都不在范围内，相关 PR 会被拒绝。只读连接是硬约束：任何写回源文件的代码都不接受。
